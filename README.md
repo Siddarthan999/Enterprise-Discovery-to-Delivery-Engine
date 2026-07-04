@@ -1,8 +1,11 @@
-### Run:
+### Build:
 `docker compose up --build`
 
 ### Stop:
 `docker compose down`
+
+### Start:
+`docker compose up --d`
 
 ### Frontend
 `http://localhost:3000`
@@ -28,6 +31,7 @@ DETACH DELETE n;
 
 ### PostgreSQL
 `docker exec -it enterprisediscovery-to-deliveryengine-postgres-1 psql -U postgres -d enterprise`
+
 To delete all the data's from the DB
 ```
 DELETE FROM document_chunks;
