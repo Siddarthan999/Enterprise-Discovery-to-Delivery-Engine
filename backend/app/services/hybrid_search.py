@@ -1,6 +1,37 @@
+import re
+
 from sqlalchemy import text
 from app.core.embedding import get_embedding
 from app.core.postgres import engine
+
+# Common words that add noise to keyword matching without adding signal.
+STOPWORDS = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "to", "of", "in", "on", "at", "for", "with", "by", "from", "up",
+    "about", "into", "over", "after", "and", "or", "but", "if", "not",
+    "can", "you", "get", "me", "what", "who", "why", "how", "when",
+    "where", "which", "do", "does", "did", "tell", "give", "please",
+    "i", "my", "your", "our", "it", "this", "that", "these", "those",
+}
+
+
+def _extract_keywords(query: str) -> list:
+    """Pulls out the meaningful words from a question, dropping stopwords
+    and short filler tokens. 'What are the three ways to consolidate
+    Notion boards?' -> ['three', 'ways', 'consolidate', 'notion', 'boards']
+    """
+    words = re.findall(r"[a-zA-Z0-9]+", query.lower())
+    return [w for w in words if w not in STOPWORDS and len(w) > 2]
+
+
+def _keyword_overlap_score(keywords: list, text_value: str) -> float:
+    """Fraction of query keywords that appear in the given text.
+    Returns 0.0-1.0."""
+    if not keywords or not text_value:
+        return 0.0
+    text_lower = text_value.lower()
+    matched = sum(1 for kw in keywords if kw in text_lower)
+    return matched / len(keywords)
 
 
 # ---------------- VECTOR SEARCH ----------------
@@ -36,14 +67,16 @@ def graph_search(conn, query, limit=10):
 
 
 # ---------------- HYBRID MERGE ----------------
-def hybrid_search(query: str, limit: int = 5):
+def hybrid_search(query: str, limit: int = 5, debug: bool = False):
     embedding = get_embedding(query)
-    query_lower = query.lower()   # 🔥 CHANGED: used for keyword boost
+    keywords = _extract_keywords(query)
 
     with engine.connect() as conn:
 
-        # 1. VECTOR RESULTS (chunk-level)
-        vector_rows = vector_search(conn, embedding, limit * 3)
+        # Pull a wider vector candidate pool than we'll actually return —
+        # keyword boosting below can promote a chunk that wasn't in the
+        # raw top-N by embedding distance alone.
+        vector_rows = vector_search(conn, embedding, limit * 6)
 
         vector_results = []
         for r in vector_rows:
@@ -53,22 +86,25 @@ def hybrid_search(query: str, limit: int = 5):
             content = r[2]
             distance = float(r[3])
 
-            # 🔥 CHANGED: convert distance → similarity score
             score = 1 / (1 + distance)
 
-            # 🔥 CHANGED: keyword boost (VERY IMPORTANT FIX)
-            if query_lower in content.lower():
-                score += 0.5
+            # Real keyword boost: fraction of query keywords present,
+            # not whole-sentence substring matching (which almost never
+            # fires on natural-language questions).
+            content_overlap = _keyword_overlap_score(keywords, content)
+            title_overlap = _keyword_overlap_score(keywords, title or "")
 
-            if query_lower in (title or "").lower():
-                score += 0.3
+            score += content_overlap * 0.4
+            score += title_overlap * 0.3
 
             vector_results.append({
                 "doc_id": doc_id,
                 "title": title,
                 "content": content,
                 "score": score,
-                "source": "vector"
+                "source": "vector",
+                "_distance": distance,
+                "_keyword_overlap": content_overlap,
             })
 
         # 2. GRAPH RESULTS (document-level)
@@ -82,7 +118,7 @@ def hybrid_search(query: str, limit: int = 5):
                 "type": r[2],
                 "source": r[3],
                 "uploaded_at": str(r[4]),
-                "score": 0.4,   # 🔥 CHANGED: slightly lower base score
+                "score": 0.4,
                 "content": "",
                 "source_type": "graph"
             })
@@ -90,34 +126,29 @@ def hybrid_search(query: str, limit: int = 5):
         # 3. MERGE + DEDUP
         merged = {}
 
-        # vector priority
         for item in vector_results:
             doc_id = item["doc_id"]
-
             if doc_id not in merged:
                 merged[doc_id] = item
             else:
-                # 🔥 CHANGED: additive merge instead of max only
-                merged[doc_id]["score"] = max(
-                    merged[doc_id]["score"],
-                    item["score"]
-                )
+                merged[doc_id]["score"] = max(merged[doc_id]["score"], item["score"])
 
-        # graph enrichment
         for item in graph_results:
             doc_id = item["doc_id"]
-
             if doc_id not in merged:
                 merged[doc_id] = item
             else:
-                # 🔥 CHANGED: stronger graph influence
                 merged[doc_id]["score"] += 0.25
 
-        # 4. FINAL SORT
         final_results = sorted(
             merged.values(),
             key=lambda x: x["score"],
             reverse=True
         )
+
+        if debug:
+            # Return everything, unfiltered, for diagnosis — see
+            # app/api/routes/debug_search.py
+            return final_results
 
         return final_results[:limit]

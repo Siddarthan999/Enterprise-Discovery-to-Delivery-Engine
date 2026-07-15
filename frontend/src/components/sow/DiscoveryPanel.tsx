@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles, Loader2, ChevronDown, ListTree } from "lucide-react";
 
 export default function DiscoveryPanel({
   transcript,
@@ -14,10 +15,10 @@ export default function DiscoveryPanel({
   setSow: (v: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   async function runDiscovery() {
     if (!transcript) return;
-
     setLoading(true);
 
     try {
@@ -32,8 +33,8 @@ export default function DiscoveryPanel({
 
       const data = await res.json();
       setState(data.state);
+      setShowDetails(false);
 
-      // optional: auto generate SOW preview
       const sowRes = await fetch("http://localhost:8000/api/sow/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,27 +50,60 @@ export default function DiscoveryPanel({
     }
   }
 
+  const fieldCount = state ? Object.keys(state).length : 0;
+
   return (
-    <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900">
-      
-      <h2 className="text-lg font-medium">Discovery Engine</h2>
-      <p className="text-xs text-zinc-400 mt-1">
-        Extract structured project state from transcript
-      </p>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className="flex items-center gap-2">
+        <div className="rounded-lg bg-[#c90c61]/10 p-1.5 text-[#c90c61]">
+          <Sparkles size={16} />
+        </div>
+        <div>
+          <h2 className="text-lg font-medium">Discovery Engine</h2>
+          <p className="text-xs text-zinc-400">
+            Extract structured project state from transcript
+          </p>
+        </div>
+      </div>
 
       <button
         onClick={runDiscovery}
         disabled={loading || !transcript}
-        className="mt-4 px-4 py-2 rounded-lg bg-white text-black text-sm font-medium hover:bg-zinc-200 disabled:opacity-50"
+        className="mt-4 flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
       >
+        {loading && <Loader2 size={14} className="animate-spin" />}
         {loading ? "Extracting..." : "Run Discovery"}
       </button>
 
-      {/* State Preview */}
+      {!transcript && (
+        <p className="mt-3 text-xs text-zinc-600">
+          Add a transcript first to enable discovery.
+        </p>
+      )}
+
+      {/* State summary */}
       {state && (
-        <pre className="mt-4 text-xs bg-zinc-950 p-3 rounded-lg border border-zinc-800 overflow-auto max-h-64">
-          {JSON.stringify(state, null, 2)}
-        </pre>
+        <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-950/60">
+          <button
+            onClick={() => setShowDetails((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3"
+          >
+            <span className="flex items-center gap-2 text-sm text-zinc-300">
+              <ListTree size={14} className="text-emerald-400" />
+              {fieldCount} field{fieldCount === 1 ? "" : "s"} extracted
+            </span>
+            <ChevronDown
+              size={14}
+              className={`text-zinc-500 transition-transform ${showDetails ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {showDetails && (
+            <pre className="max-h-64 overflow-auto border-t border-zinc-800 p-4 text-xs text-zinc-300">
+              {JSON.stringify(state, null, 2)}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );

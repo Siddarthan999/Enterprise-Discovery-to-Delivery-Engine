@@ -16,14 +16,16 @@ def export_markdown(sow_text: str) -> str:
 # -----------------------------
 # DOCX (TEMPLATE-BASED - FIXED)
 # -----------------------------
-def export_docx(sow_text: str, template_path: str | None = None) -> bytes:
+def export_docx(sow_text: str, template_path: str | None = None,
+                 cover_fields: dict | None = None) -> bytes:
     """
     Uses template engine (preserves branding, layout, headers, footer)
     """
 
     docx_bytes = export_docx_from_template(
         template_path=template_path,
-        sow_markdown=sow_text
+        sow_markdown=sow_text,
+        cover_fields=cover_fields
     )
 
     return docx_bytes
@@ -32,7 +34,8 @@ def export_docx(sow_text: str, template_path: str | None = None) -> bytes:
 # -----------------------------
 # PDF (FIXED - TEMPLATE SAFE)
 # -----------------------------
-def export_pdf(sow_text: str, template_path: str | None = None) -> bytes:
+def export_pdf(sow_text: str, template_path: str | None = None,
+                cover_fields: dict | None = None) -> bytes:
     """
     Best practice:
     DOCX → PDF using LibreOffice (preserves formatting)
@@ -41,7 +44,9 @@ def export_pdf(sow_text: str, template_path: str | None = None) -> bytes:
     # 1. generate DOCX first (WITH TEMPLATE)
     docx_bytes = export_docx_from_template(
         template_path=template_path,
-        sow_markdown=sow_text
+        sow_markdown=sow_text,
+        cover_fields=cover_fields,
+        for_pdf=True
     )
 
     tmp_id = str(uuid.uuid4())

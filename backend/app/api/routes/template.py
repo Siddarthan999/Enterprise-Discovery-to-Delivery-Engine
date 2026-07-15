@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.services.template_storage import (
     store_file,
     load_templates,
@@ -38,3 +38,16 @@ async def upload_template(file: UploadFile = File(...)):
 @router.get("/list")
 def list_templates():
     return load_templates()
+
+
+@router.delete("/{template_id}")
+def delete_template(template_id: str):
+    templates = load_templates()
+    updated = [t for t in templates if t["id"] != template_id]
+
+    if len(updated) == len(templates):
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    save_templates(updated)
+
+    return {"status": "deleted", "id": template_id}
