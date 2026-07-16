@@ -318,7 +318,8 @@ export default function ChatPage() {
                   Knowledge graph
                 </span>
                 <span className="mt-0.5 text-xs text-zinc-500">
-                  {activeGraphMessage.sources?.[0]?.title}
+                  {activeGraphMessage.sources?.length} cited source
+                  {activeGraphMessage.sources?.length !== 1 ? "s" : ""}
                 </span>
               </div>
 
@@ -336,7 +337,7 @@ export default function ChatPage() {
             <div className="flex-1 overflow-auto p-4">
               <KnowledgeGraph
                 key={openGraphIdx}
-                query={activeGraphMessage.sources?.[0]?.title}
+                docIds={activeGraphMessage.sources?.map((s: any) => s.doc_id) || []}
               />
             </div>
           </div>

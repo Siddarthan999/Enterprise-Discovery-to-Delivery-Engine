@@ -1,22 +1,46 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from app.graph.graph_builder import driver
 
 router = APIRouter()
 
 
 @router.get("/graph/search")
-def graph_search(query: str):
-
+def graph_search(
+    query: str | None = None,
+    doc_ids: str | None = Query(default=None)
+):
     with driver.session() as session:
-        result = session.run(
-            """
-            MATCH (d:Document)
-            WHERE toLower(d.title) CONTAINS toLower($q)
-            RETURN d
-            LIMIT 20
-            """,
-            q=query
-        )
+        if doc_ids:
+            ids = [
+                int(x.strip())
+                for x in doc_ids.split(",")
+                if x.strip().isdigit()
+            ]
+
+            if not ids:
+                return []
+
+            result = session.run(
+                """
+                MATCH (d:Document)
+                WHERE d.id IN $ids OR d.doc_id IN $ids
+                RETURN d
+                LIMIT 50
+                """,
+                ids=ids
+            )
+        elif query:
+            result = session.run(
+                """
+                MATCH (d:Document)
+                WHERE toLower(d.title) CONTAINS toLower($q)
+                RETURN d
+                LIMIT 20
+                """,
+                q=query
+            )
+        else:
+            return []
 
         return [r["d"] for r in result]
 

@@ -29,7 +29,7 @@ function colorForType(type?: string) {
   return TYPE_COLORS[type.toLowerCase()] || TYPE_COLORS.default;
 }
 
-export default function KnowledgeGraph({ query }: { query: string }) {
+export default function KnowledgeGraph({ query, docIds }: { query: string; docIds: string[] }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -40,40 +40,46 @@ export default function KnowledgeGraph({ query }: { query: string }) {
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 });
 
   // FETCH GRAPH DATA
-  async function fetchGraph() {
-    if (!query) return;
-    setLoading(true);
+async function fetchGraph() {
+  if ((!query || !query.trim()) && (!docIds || docIds.length === 0)) return;
 
-    try {
-      const res = await fetch(
-        `http://localhost:8000/api/graph/search?query=${encodeURIComponent(query)}`
-      );
+  setLoading(true);
 
-      const data = await res.json();
+  try {
+    let url = "";
 
-      const fetchedNodes: Node[] = data.map((d: any) => ({
-        id: String(d.id),
-        title: d.title,
-        type: d.type,
-        source: d.source,
-      }));
-
-      const fetchedLinks: Link[] = fetchedNodes.slice(1).map((n) => ({
-        source: fetchedNodes[0].id,
-        target: n.id,
-      }));
-
-      setNodes(fetchedNodes);
-      setLinks(fetchedLinks);
-      setSelected(null);
-    } finally {
-      setLoading(false);
+    if (docIds && docIds.length > 0) {
+      url = `http://localhost:8000/api/graph/search?doc_ids=${docIds.join(",")}`;
+    } else {
+      url = `http://localhost:8000/api/graph/search?query=${encodeURIComponent(query!)}`;
     }
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const fetchedNodes: Node[] = data.map((d: any) => ({
+      id: String(d.id),
+      title: d.title,
+      type: d.type,
+      source: d.source,
+    }));
+
+    const fetchedLinks: Link[] = fetchedNodes.slice(1).map((n) => ({
+      source: fetchedNodes[0].id,
+      target: n.id,
+    }));
+
+    setNodes(fetchedNodes);
+    setLinks(fetchedLinks);
+    setSelected(null);
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     fetchGraph();
-  }, [query]);
+  }, [query, JSON.stringify(docIds || [])]);
 
   // TRACK CONTAINER SIZE — this is what makes the graph fill its parent
   // (a chat modal, a page section, whatever) instead of being stuck at a
