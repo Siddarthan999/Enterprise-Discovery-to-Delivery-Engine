@@ -48,7 +48,7 @@ Run this cmd for issues in GPU layer and ollama isn't running:<br>
 `set OLLAMA_NO_GPU=1`
 
 Install the Model:<br>
-`ollama pull qwen2.5-coder:7b` or `3b`
+`ollama pull qwen2.5-coder:3b` or `7b`
 
 Run the Model:<br>
-`ollama run qwen2.5-coder:7b`
+`ollama run qwen2.5-coder:3b` or `7b`
