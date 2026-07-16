@@ -14,6 +14,8 @@
 ### Backend
 `http://localhost:8000`
 
+`http://localhost:8000/docs#/`
+
 To Check Logs: `docker compose logs -f backend`
 
 ### Neo4j
