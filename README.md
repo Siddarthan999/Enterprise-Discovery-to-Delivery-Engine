@@ -44,8 +44,11 @@ DELETE FROM documents;
 ```
 
 ### Ollama
+Run this cmd for issues in GPU layer and ollama isn't running:<br>
 `set OLLAMA_NO_GPU=1`
 
-`ollama pull qwen2.5-coder:7b`
+Install the Model:<br>
+`ollama pull qwen2.5-coder:7b` or `3b`
 
+Run the Model:<br>
 `ollama run qwen2.5-coder:7b`
