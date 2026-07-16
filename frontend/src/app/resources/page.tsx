@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppNav from "@/components/layout/AppNav";
+import {
+  API_BASE,
+  getTemplates,
+  getDocuments,
+  uploadTemplate,
+  uploadDocument,
+  deleteTemplate,
+  deleteDocument,
+} from "@/lib/api";
 
 type Template = {
   id: string;
@@ -19,8 +28,6 @@ type KnowledgeDoc = {
 };
 
 type Tab = "knowledge" | "templates";
-
-const API_BASE = "http://localhost:8000/api";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -70,15 +77,11 @@ export default function ResourcesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const loadTemplates = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/template/list`);
-    const data = await res.json();
-    setTemplates(data);
+    setTemplates(await getTemplates());
   }, []);
 
   const loadDocuments = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/ingest/documents`);
-    const data = await res.json();
-    setDocuments(data);
+    setDocuments(await getDocuments());
   }, []);
 
   useEffect(() => {
@@ -95,15 +98,10 @@ export default function ResourcesPage() {
       const form = new FormData();
       form.append("file", file);
 
-      const endpoint =
-        tab === "templates"
-          ? `${API_BASE}/template/upload`
-          : `${API_BASE}/ingest/document`;
-
-      const res = await fetch(endpoint, { method: "POST", body: form });
-
-      if (!res.ok) {
-        throw new Error(`Upload failed (${res.status})`);
+      if (tab === "templates") {
+        await uploadTemplate(form);
+      } else {
+        await uploadDocument(form);
       }
 
       setFile(null);
@@ -124,7 +122,7 @@ export default function ResourcesPage() {
     if (!confirm("Delete this template? This can't be undone.")) return;
     setDeletingId(id);
     try {
-      await fetch(`${API_BASE}/template/${id}`, { method: "DELETE" });
+      await deleteTemplate(id);
       await loadTemplates();
     } finally {
       setDeletingId(null);
@@ -135,7 +133,7 @@ export default function ResourcesPage() {
     if (!confirm("Delete this document from the knowledge base? This can't be undone.")) return;
     setDeletingId(id);
     try {
-      await fetch(`${API_BASE}/ingest/document/${id}`, { method: "DELETE" });
+      await deleteDocument(id);
       await loadDocuments();
     } finally {
       setDeletingId(null);

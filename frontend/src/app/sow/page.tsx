@@ -7,6 +7,7 @@ import DiscoveryPanel from "@/components/sow/DiscoveryPanel";
 import SowViewer from "@/components/sow/SowViewer";
 import ExportPanel from "@/components/sow/ExportPanel";
 import AppNav from "@/components/layout/AppNav";
+import { getTemplates } from "@/lib/api";
 
 type Step = {
   label: string;
@@ -23,8 +24,7 @@ export default function SOWPage() {
 
   useEffect(() => {
     async function loadTemplates() {
-      const res = await fetch("http://localhost:8000/api/template/list");
-      const data = await res.json();
+      const data = await getTemplates();
       setTemplates(data);
       if (data.length > 0) {
         setSelectedTemplate(data[0].id);

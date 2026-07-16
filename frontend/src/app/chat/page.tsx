@@ -71,7 +71,7 @@ export default function ChatPage() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/answer`,
+        `${process.env.NEXT_PUBLIC_API_URL}/answer`,
         {
           method: "POST",
           headers: {

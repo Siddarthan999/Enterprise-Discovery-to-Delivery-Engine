@@ -189,15 +189,23 @@ Respond ONLY with valid JSON in this exact shape, no markdown fences, no other t
              into one readable sentence.
              if found_answer is false: exactly this text:
              '{FALLBACK_MESSAGE}'>",
-  "cited_doc_ids": [<the DOCUMENT_ID(s) you actually drew the answer from —
-                     usually just one. MUST be an empty list if
-                     found_answer is false.>],
+  "cited_doc_ids": [<every DOCUMENT_ID whose content genuinely contributed
+                     to the answer. If two or more documents each contain
+                     supporting information — even if one document alone
+                     would have been enough to answer partially — include
+                     all of them. Do NOT arbitrarily collapse this to a
+                     single ID out of caution; only include a document if
+                     you actually drew from it, but include ALL such
+                     documents. MUST be an empty list if found_answer is
+                     false.>],
   "suggested_questions": ["<follow-up 1>", "<follow-up 2>", "<follow-up 3>"]
 }}
 
 The "answer" value MUST be a plain string, never a JSON array or object.
 "cited_doc_ids" must only contain DOCUMENT_IDs that genuinely support the
 answer — do not list every document in the context, only the ones used.
+But when multiple retrieved documents each genuinely support the answer,
+list all of them; under-citing is just as wrong as over-citing.
 If found_answer is false, cited_doc_ids MUST be empty — do not cite a
 document just because it was retrieved if it doesn't actually contain
 the answer.
