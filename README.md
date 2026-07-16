@@ -46,4 +46,6 @@ DELETE FROM documents;
 ### Ollama
 `set OLLAMA_NO_GPU=1`
 
+`ollama pull qwen2.5-coder:7b`
+
 `ollama run qwen2.5-coder:7b`
