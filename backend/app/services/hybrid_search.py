@@ -35,7 +35,24 @@ def _keyword_overlap_score(keywords: list, text_value: str) -> float:
 
 
 # ---------------- VECTOR SEARCH ----------------
-def vector_search(conn, embedding, limit=10):
+def vector_search(conn, embedding, limit=10, category=None):
+    if category:
+        return conn.execute(
+            text("""
+                SELECT
+                    c.doc_id,
+                    d.title,
+                    c.content,
+                    c.embedding <-> CAST(:emb AS vector) AS distance
+                FROM document_chunks c
+                JOIN documents d ON d.id = c.doc_id
+                WHERE d.category = :category
+                ORDER BY c.embedding <-> CAST(:emb AS vector)
+                LIMIT :limit
+            """),
+            {"emb": embedding, "limit": limit, "category": category}
+        ).fetchall()
+
     return conn.execute(
         text("""
             SELECT
@@ -53,7 +70,20 @@ def vector_search(conn, embedding, limit=10):
 
 
 # ---------------- GRAPH SEARCH ----------------
-def graph_search(conn, query, limit=10):
+def graph_search(conn, query, limit=10, category=None):
+    if category:
+        return conn.execute(
+            text("""
+                SELECT id, title, type, source, uploaded_at
+                FROM documents
+                WHERE (LOWER(title) LIKE LOWER(:q)
+                   OR LOWER(type) LIKE LOWER(:q))
+                  AND category = :category
+                LIMIT :limit
+            """),
+            {"q": f"%{query}%", "limit": limit, "category": category}
+        ).fetchall()
+
     return conn.execute(
         text("""
             SELECT id, title, type, source, uploaded_at
@@ -67,20 +97,15 @@ def graph_search(conn, query, limit=10):
 
 
 # ---------------- HYBRID MERGE ----------------
-def hybrid_search(query: str, limit: int = 5, debug: bool = False):
+def hybrid_search(query: str, limit: int = 5, debug: bool = False, category: str | None = None):
     embedding = get_embedding(query)
     keywords = _extract_keywords(query)
 
     with engine.connect() as conn:
-
-        # Pull a wider vector candidate pool than we'll actually return —
-        # keyword boosting below can promote a chunk that wasn't in the
-        # raw top-N by embedding distance alone.
-        vector_rows = vector_search(conn, embedding, limit * 6)
+        vector_rows = vector_search(conn, embedding, limit * 6, category=category)
 
         vector_results = []
         for r in vector_rows:
-
             doc_id = r[0]
             title = r[1]
             content = r[2]
@@ -88,9 +113,6 @@ def hybrid_search(query: str, limit: int = 5, debug: bool = False):
 
             score = 1 / (1 + distance)
 
-            # Real keyword boost: fraction of query keywords present,
-            # not whole-sentence substring matching (which almost never
-            # fires on natural-language questions).
             content_overlap = _keyword_overlap_score(keywords, content)
             title_overlap = _keyword_overlap_score(keywords, title or "")
 
@@ -107,8 +129,7 @@ def hybrid_search(query: str, limit: int = 5, debug: bool = False):
                 "_keyword_overlap": content_overlap,
             })
 
-        # 2. GRAPH RESULTS (document-level)
-        graph_rows = graph_search(conn, query, limit)
+        graph_rows = graph_search(conn, query, limit, category=category)
 
         graph_results = []
         for r in graph_rows:
@@ -123,7 +144,6 @@ def hybrid_search(query: str, limit: int = 5, debug: bool = False):
                 "source_type": "graph"
             })
 
-        # 3. MERGE + DEDUP
         merged = {}
 
         for item in vector_results:
@@ -146,9 +166,10 @@ def hybrid_search(query: str, limit: int = 5, debug: bool = False):
             reverse=True
         )
 
+        if not final_results:
+            print(f"⚠️ hybrid_search: 0 results for category={category!r}, query={query!r}")
+
         if debug:
-            # Return everything, unfiltered, for diagnosis — see
-            # app/api/routes/debug_search.py
             return final_results
 
         return final_results[:limit]

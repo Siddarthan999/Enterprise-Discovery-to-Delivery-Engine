@@ -8,11 +8,19 @@ export default function DiscoveryPanel({
   state,
   setState,
   setSow,
+  setReview,
+  setConfidence,
+  setHistoricalSowsUsed,
+  setHistoricalRisksConsidered,
 }: {
   transcript: string;
   state: any;
   setState: (v: any) => void;
   setSow: (v: string) => void;
+  setReview: (value: any) => void;
+  setConfidence: (value: any) => void;
+  setHistoricalSowsUsed: (value: any[]) => void;
+  setHistoricalRisksConsidered: (value: any[]) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -22,6 +30,12 @@ export default function DiscoveryPanel({
     setLoading(true);
 
     try {
+      setSow("");
+      setReview(null);
+      setConfidence(null);
+      setHistoricalSowsUsed([]);
+      setHistoricalRisksConsidered([]);
+
       const res = await fetch("http://localhost:8000/api/discovery/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,8 +46,18 @@ export default function DiscoveryPanel({
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Discovery request failed");
+      }
+
       setState(data.state);
       setShowDetails(false);
+
+      if (!data.state || data.state.error) {
+        setSow("");
+        return;
+      }
 
       const sowRes = await fetch("http://localhost:8000/api/sow/generate", {
         method: "POST",
@@ -42,15 +66,46 @@ export default function DiscoveryPanel({
       });
 
       const sowData = await sowRes.json();
-      setSow(sowData.sow);
-    } catch (err) {
+
+      if (!sowRes.ok) {
+        throw new Error(sowData?.error || "SOW generation failed");
+      }
+
+      if (sowData.error) {
+        throw new Error(sowData.error);
+      }
+
+      setSow(sowData.sow || "");
+      setReview(sowData.review ?? null);
+      setConfidence(sowData.confidence ?? null);
+      setHistoricalSowsUsed(sowData.historical_sows_used ?? []);
+      setHistoricalRisksConsidered(
+        sowData.historical_risks_considered ?? []
+      );
+    } catch (err: any) {
       console.error("Discovery failed:", err);
+
+      setSow("");
+      setReview(null);
+      setConfidence(null);
+      setHistoricalSowsUsed([]);
+      setHistoricalRisksConsidered([]);
+
+      setState((prev: any) => ({
+        ...(prev || {}),
+        frontend_error:
+          err?.message || "Discovery or SOW generation failed",
+      }));
     } finally {
       setLoading(false);
     }
   }
 
-  const fieldCount = state ? Object.keys(state).length : 0;
+  const fieldCount = state
+  ? Object.keys(state).filter(
+      (key) => key !== "error" && key !== "frontend_error" && key !== "raw_response"
+    ).length
+  : 0;
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -79,6 +134,18 @@ export default function DiscoveryPanel({
         <p className="mt-3 text-xs text-zinc-600">
           Add a transcript first to enable discovery.
         </p>
+      )}
+
+      {state?.error && (
+        <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+          Discovery extraction failed: {state.error}
+        </div>
+      )}
+
+      {state?.frontend_error && (
+        <div className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
+          {state.frontend_error}
+        </div>
       )}
 
       {/* State summary */}

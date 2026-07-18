@@ -1,10 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.template_storage import (
+from app.services.sow.template_storage import (
     store_file,
     load_templates,
     save_templates
 )
-from app.services.template_parser import extract_sections
+from app.services.sow.template_parser import extract_sections
 
 router = APIRouter()
 
