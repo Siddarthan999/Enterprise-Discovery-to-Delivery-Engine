@@ -90,6 +90,36 @@ export const deleteDocument = (id: string) =>
   );
 
 //
+// Historical SOW APIs
+//
+export const getHistoricalSows = () =>
+  API.get("/sow-history/list").then(
+    (res) => res.data
+  );
+
+export async function getHistoricalSowRisks(id: string | number) {
+  const res = await fetch(`${API_BASE}/sow-history/${id}/risks`);
+
+  if (!res.ok) {
+    throw new Error("Failed to load risks");
+  }
+
+  return res.json();
+}
+
+export const uploadHistoricalSow = (
+  formData: FormData
+) =>
+  API.post("/sow-history/upload", formData).then(
+    (res) => res.data
+  );
+
+export const deleteHistoricalSow = (id: string) =>
+  API.delete(`/sow-history/${id}`).then(
+    (res) => res.data
+  );
+
+//
 // Transcript APIs
 //
 export const uploadTranscript = (

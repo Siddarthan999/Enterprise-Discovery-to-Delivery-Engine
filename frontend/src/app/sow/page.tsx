@@ -8,6 +8,7 @@ import SowViewer from "@/components/sow/SowViewer";
 import ExportPanel from "@/components/sow/ExportPanel";
 import AppNav from "@/components/layout/AppNav";
 import { getTemplates } from "@/lib/api";
+import ReviewPanel from "@/components/sow/ReviewPanel";
 
 type Step = {
   label: string;
@@ -21,6 +22,10 @@ export default function SOWPage() {
   const [sow, setSow] = useState<string>("");
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [review, setReview] = useState<any>(null);
+  const [confidence, setConfidence] = useState<any>(null);
+  const [historicalSowsUsed, setHistoricalSowsUsed] = useState<any[]>([]);
+  const [historicalRisksConsidered, setHistoricalRisksConsidered] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadTemplates() {
@@ -126,6 +131,10 @@ export default function SOWPage() {
             state={state}
             setState={setState}
             setSow={setSow}
+            setReview={setReview}
+            setConfidence={setConfidence}
+            setHistoricalSowsUsed={setHistoricalSowsUsed}
+            setHistoricalRisksConsidered={setHistoricalRisksConsidered}
           />
         </div>
 
@@ -133,7 +142,8 @@ export default function SOWPage() {
         <div className="mt-6">
           <SowViewer sow={sow} />
         </div>
-
+        {/* Review Panel */}
+        <ReviewPanel review={review} confidence={confidence} />
         {/* Export */}
         <div className="mt-6">
           <ExportPanel

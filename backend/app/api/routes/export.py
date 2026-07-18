@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 from fastapi.responses import Response
 
-from app.services.sow_exporter import export_pdf, export_docx
-from app.services.template_store import get_template_path
-from app.services.cover_field_extractor import derive_cover_fields
+from app.services.sow.sow_exporter import export_pdf, export_docx
+from app.services.sow.template_store import get_template_path
+from app.services.sow.cover_field_extractor import derive_cover_fields
 
 router = APIRouter()
 

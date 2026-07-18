@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from app.services.project_extractor import extract_project_state
-from app.services.project_state_service import save_project_state
+from app.services.sow.project_extractor import extract_project_state
+from app.services.sow.project_state_service import save_project_state
 
 router = APIRouter()
 
@@ -13,8 +13,7 @@ class DiscoveryRequest(BaseModel):
 
 @router.post("/discovery/extract")
 def discovery(payload: DiscoveryRequest):
-
-    transcript = payload.transcript
+    transcript = (payload.transcript or "").strip()
 
     if not transcript:
         return {
@@ -24,10 +23,20 @@ def discovery(payload: DiscoveryRequest):
 
     state = extract_project_state(transcript)
 
-    save_project_state(
-        payload.title,
-        state
-    )
+    if not isinstance(state, dict):
+        return {
+            "error": "Discovery extraction returned invalid state",
+            "state": None
+        }
+
+    if state.get("error"):
+        return {
+            "title": payload.title,
+            "error": f"Discovery extraction failed: {state['error']}",
+            "state": state
+        }
+
+    save_project_state(payload.title, state)
 
     return {
         "title": payload.title,

@@ -143,7 +143,7 @@ def generate_answer(question: str, session_id: str):
 
     standalone_question = condense_question(question, history)
 
-    results = hybrid_search(standalone_question, limit=5)
+    results = hybrid_search(standalone_question, limit=5, category=None)
 
     relevant_results = [
         r for r in results if r.get("score", 0) >= RELEVANCE_THRESHOLD

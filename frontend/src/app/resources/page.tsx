@@ -10,6 +10,10 @@ import {
   uploadDocument,
   deleteTemplate,
   deleteDocument,
+  getHistoricalSows,
+  getHistoricalSowRisks,
+  uploadHistoricalSow,
+  deleteHistoricalSow,
 } from "@/lib/api";
 
 type Template = {
@@ -27,7 +31,22 @@ type KnowledgeDoc = {
   uploaded_at: string;
 };
 
-type Tab = "knowledge" | "templates";
+type HistoricalSow = {
+  id: string;
+  title: string;
+  type: string;
+  uploaded_at: string;
+  risk_count: number;
+};
+
+type RiskExample = {
+  id: number;
+  category: string;
+  risk_description: string;
+  mitigation_approach: string;
+};
+
+type Tab = "knowledge" | "templates" | "history";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -66,15 +85,22 @@ function FileIcon() {
 }
 
 export default function ResourcesPage() {
-  const [tab, setTab] = useState<"knowledge" | "templates">("knowledge");
+  const [tab, setTab] = useState<Tab>("knowledge");
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDoc[]>([]);
+  const [historicalSows, setHistoricalSows] = useState<HistoricalSow[]>([]);
 
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [expandedSow, setExpandedSow] = useState<string | null>(null);
+
+  const [riskMap, setRiskMap] = useState<
+    Record<string, RiskExample[]>
+  >({});
 
   const loadTemplates = useCallback(async () => {
     setTemplates(await getTemplates());
@@ -84,10 +110,32 @@ export default function ResourcesPage() {
     setDocuments(await getDocuments());
   }, []);
 
+  const loadHistoricalSows = useCallback(async () => {
+    setHistoricalSows(await getHistoricalSows());
+  }, []);
+
+  async function toggleRisks(id: string) {
+    if (expandedSow === id) {
+      setExpandedSow(null);
+      return;
+    }
+
+    if (!riskMap[id]) {
+      const risks = await getHistoricalSowRisks(id);
+      setRiskMap((prev) => ({
+        ...prev,
+        [id]: risks,
+      }));
+    }
+
+    setExpandedSow(id);
+  }
+
   useEffect(() => {
     loadTemplates();
     loadDocuments();
-  }, [loadTemplates, loadDocuments]);
+    loadHistoricalSows();
+  }, [loadTemplates, loadDocuments, loadHistoricalSows]);
 
   async function handleUpload() {
     if (!file) return;
@@ -100,17 +148,16 @@ export default function ResourcesPage() {
 
       if (tab === "templates") {
         await uploadTemplate(form);
+        await loadTemplates();
+      } else if (tab === "history") {
+        await uploadHistoricalSow(form);
+        await loadHistoricalSows();
       } else {
         await uploadDocument(form);
+        await loadDocuments();
       }
 
       setFile(null);
-
-      if (tab === "templates") {
-        await loadTemplates();
-      } else {
-        await loadDocuments();
-      }
     } catch (err: any) {
       setError(err.message || "Upload failed");
     } finally {
@@ -140,7 +187,19 @@ export default function ResourcesPage() {
     }
   }
 
+  async function handleDeleteHistoricalSow(id: string) {
+    if (!confirm("Delete this historical SOW and its extracted risk examples? This can't be undone.")) return;
+    setDeletingId(id);
+    try {
+      await deleteHistoricalSow(id);
+      await loadHistoricalSows();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const isTemplates = tab === "templates";
+  const isHistory = tab === "history";
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_45%),_linear-gradient(135deg,_#050816_0%,_#0b1120_45%,_#020617_100%)] text-white">
@@ -150,7 +209,7 @@ export default function ResourcesPage() {
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/20">
           <h1 className="text-2xl font-semibold text-white">Resources</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Manage SOW templates and knowledge base documents.
+            Manage SOW templates, knowledge base documents, and historical SOWs.
           </p>
         </div>
 
@@ -160,7 +219,7 @@ export default function ResourcesPage() {
             <button
               onClick={() => setTab("knowledge")}
               className={`flex-1 lg:flex-none rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
-                !isTemplates
+                tab === "knowledge"
                   ? "bg-[#c90c61] text-white shadow-lg shadow-[#c90c61]/20"
                   : "bg-zinc-900/80 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
               }`}
@@ -170,7 +229,7 @@ export default function ResourcesPage() {
                 {documents.length} document{documents.length === 1 ? "" : "s"}
               </div>
             </button>
-            
+
             <button
               onClick={() => setTab("templates")}
               className={`flex-1 lg:flex-none rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
@@ -184,6 +243,20 @@ export default function ResourcesPage() {
                 {templates.length} file{templates.length === 1 ? "" : "s"}
               </div>
             </button>
+
+            <button
+              onClick={() => setTab("history")}
+              className={`flex-1 lg:flex-none rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                isHistory
+                  ? "bg-[#c90c61] text-white shadow-lg shadow-[#c90c61]/20"
+                  : "bg-zinc-900/80 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              }`}
+            >
+              Historical SOWs
+              <div className="mt-0.5 text-xs font-normal opacity-70">
+                {historicalSows.length} SOW{historicalSows.length === 1 ? "" : "s"}
+              </div>
+            </button>
           </div>
 
           {/* Main content */}
@@ -191,11 +264,17 @@ export default function ResourcesPage() {
             {/* Upload card */}
             <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-lg shadow-black/20">
               <h2 className="text-sm font-semibold text-white">
-                {isTemplates ? "Upload a SOW template" : "Add a document to the knowledge base"}
+                {isTemplates
+                  ? "Upload a SOW template"
+                  : isHistory
+                  ? "Upload a past SOW as precedent"
+                  : "Add a document to the knowledge base"}
               </h2>
               <p className="mt-1 text-xs text-zinc-400">
                 {isTemplates
                   ? "DOCX files used as the base layout/branding for generated SOWs."
+                  : isHistory
+                  ? "Completed SOWs from past engagements. Used to ground new SOWs in your firm's actual drafting style and to surface precedent risks — never shown in chat or search."
                   : "PDF, DOCX, TXT, PPTX, MD, or EML files — parsed and embedded for search and discovery context."}
               </p>
 
@@ -250,7 +329,7 @@ export default function ResourcesPage() {
             <div className="rounded-2xl border border-white/10 bg-zinc-900/80 shadow-lg shadow-black/20">
               <div className="border-b border-white/10 px-6 py-4">
                 <h2 className="text-sm font-semibold text-white">
-                  {isTemplates ? "Templates" : "Documents"}
+                  {isTemplates ? "Templates" : isHistory ? "Historical SOWs" : "Documents"}
                 </h2>
               </div>
 
@@ -267,7 +346,6 @@ export default function ResourcesPage() {
                         className="flex items-center justify-between gap-4 px-6 py-4"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          {/* <div className="rounded-lg bg-[#c90c61]/10 p-2 text-[#c90c61]"> */}
                           <div className="rounded-lg bg-cyan-500/10 p-2 text-cyan-400">
                             <FileIcon />
                           </div>
@@ -289,6 +367,93 @@ export default function ResourcesPage() {
                         >
                           <TrashIcon />
                         </button>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : isHistory ? (
+                historicalSows.length === 0 ? (
+                  <p className="px-6 py-8 text-center text-sm text-zinc-500">
+                    No historical SOWs uploaded yet.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-white/5">
+                    {historicalSows.map((h) => (
+                      <li
+                        key={h.id}
+                        className="px-6 py-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-400">
+                              <FileIcon />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">
+                                {h.title}
+                              </p>
+
+                              <div className="mt-1 flex items-center gap-3">
+                                <p className="text-xs text-zinc-500">
+                                  {h.type} · uploaded {formatDate(h.uploaded_at)}
+                                </p>
+
+                                <button
+                                  onClick={() => toggleRisks(h.id)}
+                                  className="text-xs text-[#c90c61] hover:underline"
+                                >
+                                  {h.risk_count} risk{h.risk_count === 1 ? "" : "s"} extracted{" "}
+                                  {expandedSow === h.id ? "▲" : "▼"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleDeleteHistoricalSow(h.id)}
+                            disabled={deletingId === h.id}
+                            className="rounded-lg p-2 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+                            title="Delete historical SOW"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+
+                        {expandedSow === h.id && (
+                          <div className="ml-11 mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                            {riskMap[h.id]?.length ? (
+                              <div className="space-y-4">
+                                {riskMap[h.id].map((risk, index) => (
+                                  <div
+                                    key={risk.id}
+                                    className="border-b border-white/10 pb-3 last:border-b-0"
+                                  >
+                                    <span className="rounded bg-[#c90c61]/20 px-2 py-1 text-xs text-[#ff6ba8]">
+                                      {risk.category || "General"}
+                                    </span>
+
+                                    <p className="mt-2 text-sm text-white">
+                                      <strong>{index + 1}.</strong>{" "}
+                                      {risk.risk_description}
+                                    </p>
+
+                                    {risk.mitigation_approach && (
+                                      <p className="mt-1 text-xs text-zinc-400">
+                                        <strong>Mitigation:</strong>{" "}
+                                        {risk.mitigation_approach}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-zinc-500">
+                                No extracted risks found.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

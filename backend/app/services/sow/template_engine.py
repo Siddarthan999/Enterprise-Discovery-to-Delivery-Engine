@@ -6,19 +6,14 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml.ns import qn
+from docx.text.paragraph import Paragraph
 from io import BytesIO
-
 
 # ----------------------------
 # FONT AVAILABILITY (for PDF path only)
 # ----------------------------
 _INSTALLED_FONTS_CACHE = None
 
-# Metric-compatible substitutes for common MS-style fonts, chosen because
-# they're widely available on Linux (via fonts-liberation / fonts-crosextra
-# packages) and match glyph widths closely enough that line breaks/layout
-# don't shift. Extend this table as you discover more gaps in your
-# specific server environment.
 _FONT_SUBSTITUTES = {
     "calibri": "Carlito",
     "cambria": "Caladea",
@@ -32,6 +27,7 @@ _FONT_SUBSTITUTES = {
 
 _GENERIC_FALLBACK_SERIF = "Liberation Serif"
 _GENERIC_FALLBACK_SANS = "Liberation Sans"
+_SOW_BODY_PLACEHOLDER = "{{SOW_CONTENT}}"
 
 
 def _get_installed_font_names() -> set:
@@ -49,18 +45,12 @@ def _get_installed_font_names() -> set:
                 names.add(name.strip().lower())
         _INSTALLED_FONTS_CACHE = names
     except Exception:
-        # fontconfig unavailable — don't crash export, just skip substitution.
         _INSTALLED_FONTS_CACHE = set()
 
     return _INSTALLED_FONTS_CACHE
 
 
 def _resolve_font_for_pdf(font_name: str) -> str:
-    """Only used when building the DOCX that will be converted to PDF via
-    LibreOffice. If the requested font isn't actually installed on this
-    server, LibreOffice would otherwise silently substitute something
-    unpredictable — instead substitute deliberately to a known-good,
-    metric-compatible font."""
     if not font_name:
         return _GENERIC_FALLBACK_SANS
 
@@ -72,8 +62,6 @@ def _resolve_font_for_pdf(font_name: str) -> str:
     if substitute and substitute.lower() in installed:
         return substitute
 
-    # Last resort: guess serif vs sans from the name and use whichever
-    # generic fallback is actually installed.
     serif_hint = any(k in font_name.lower() for k in ["times", "georgia", "cambria", "serif", "garamond"])
     fallback = _GENERIC_FALLBACK_SERIF if serif_hint else _GENERIC_FALLBACK_SANS
     return fallback if fallback.lower() in installed else font_name
@@ -111,9 +99,7 @@ def _detect_brand_profile(doc: Document) -> dict:
         title_size, title_run = largest_run
         title_font_name = title_run.font.name or body_font_name
         title_bold = bool(title_run.font.bold)
-        title_color = None
-        if title_run.font.color and title_run.font.color.rgb:
-            title_color = title_run.font.color.rgb
+        title_color = title_run.font.color.rgb if title_run.font.color and title_run.font.color.rgb else None
     else:
         title_size = 28
         title_font_name = body_font_name
@@ -190,23 +176,22 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
         bold=False, color=profile["body_color"],
         base_style="List Bullet" if has_list_style else None,
     )
-    styles["_has_native_bullet"] = has_list_style
 
+    has_number_style = "List Number" in [s.name for s in doc.styles]
+    styles["number"] = _get_or_create_style(
+        doc, "SOW Number", body_font, body_size,
+        bold=False, color=profile["body_color"],
+        base_style="List Number" if has_number_style else None,
+    )
+
+    styles["_has_native_bullet"] = has_list_style
+    styles["_has_native_number"] = has_number_style
     return styles
 
 
 # ----------------------------
 # COVER PAGE PLACEHOLDER REPLACEMENT
 # ----------------------------
-
-# Exact (case-insensitive, whitespace-trimmed) paragraph/content-control text
-# this engine recognizes as a placeholder label, mapped to the cover_fields
-# key that should replace it. Extend this as you see more template
-# conventions. Includes both the "clean label" form (e.g. "Company Name")
-# and the bracketed "instructional placeholder" form some cover-page
-# templates use (e.g. "[Company Name]" or Word's own
-# "[Type the company name]" ghost text) — add more bracketed variants here
-# if your diagnostic print turns up different wording.
 _LITERAL_PLACEHOLDER_LABELS = {
     "company name": "company_name",
     "sub-headline": "sub_headline",
@@ -217,11 +202,6 @@ _LITERAL_PLACEHOLDER_LABELS = {
     "[type the document subtitle]": "sub_headline",
 }
 
-# Content controls are sometimes tagged (w:tag) or aliased (w:alias) by
-# whoever built the template. Matching on tag/alias is more robust than
-# matching on displayed text, since it survives edits to the visible
-# placeholder wording. Add mappings here if you discover tags in your
-# template (check via the diagnostic snippet mentioned below).
 _SDT_TAG_FIELD_MAP = {
     "companyname": "company_name",
     "company_name": "company_name",
@@ -234,9 +214,6 @@ _COMPLETED_ON_PREFIX = "this statement of work completed on"
 
 
 def _set_paragraph_text_preserve_format(paragraph, new_text: str):
-    """Replaces a paragraph's visible text while keeping the first run's
-    font formatting (name/size/bold/color) — critical so cover-page
-    styling survives the substitution instead of reverting to default."""
     if not paragraph.runs:
         paragraph.add_run(new_text)
         return
@@ -247,12 +224,10 @@ def _set_paragraph_text_preserve_format(paragraph, new_text: str):
 
 
 def _sdt_placeholder_text(sdt_element) -> str:
-    """Concatenate all w:t text inside one content control (SDT)."""
     return "".join(t.text or "" for t in sdt_element.iter(qn("w:t")))
 
 
 def _sdt_tag_or_alias(sdt_element) -> str | None:
-    """Return the w:tag value, falling back to w:alias, lowercased."""
     sdt_pr = sdt_element.find(qn("w:sdtPr"))
     if sdt_pr is None:
         return None
@@ -273,10 +248,6 @@ def _sdt_tag_or_alias(sdt_element) -> str | None:
 
 
 def _set_sdt_text(sdt_element, new_text: str):
-    """Content controls can have multiple w:t runs. Put the new text in
-    the first w:t and blank the rest, same pattern as
-    _set_paragraph_text_preserve_format so the first run's formatting
-    (and thus the control's font/color) is preserved."""
     t_elements = list(sdt_element.iter(qn("w:t")))
     if not t_elements:
         return
@@ -292,8 +263,6 @@ def _resolve_field_value(field_key: str, cover_fields: dict, completion_date: st
 
 
 def _apply_token_syntax(raw_text: str, cover_fields: dict, completion_date: str) -> str | None:
-    """Returns the substituted text if {{TOKEN}} syntax was found and
-    changed something, else None."""
     if "{{" not in raw_text or "}}" not in raw_text:
         return None
 
@@ -307,23 +276,6 @@ def _apply_token_syntax(raw_text: str, cover_fields: dict, completion_date: str)
 
 
 def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
-    """Three mechanisms, all scoped to the template's ORIGINAL content
-    only (called before any generated content is added, so there's no
-    risk of matching against the SOW body text):
-
-    1. {{TOKEN}} syntax — explicit, safe to match anywhere. Recommended
-       for new templates going forward. Checked in both plain paragraphs
-       and content controls.
-    2. Content-control (w:sdt) tag/alias matching — the most robust way
-       to target cover-page fields when the template was built with
-       Word's "Insert Cover Page" gallery or custom content controls,
-       since python-docx's doc.paragraphs does NOT walk into w:sdt
-       blocks at all.
-    3. Known literal placeholder labels (e.g. text that says exactly
-       "Company Name" or "[Type the company name]") — supports both
-       plain-paragraph templates and content controls that have no
-       tag/alias set, by matching on displayed text as a fallback.
-    """
     if not cover_fields:
         cover_fields = {}
 
@@ -331,7 +283,6 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         "completion_date", datetime.utcnow().strftime("%B %d, %Y")
     )
 
-    # --- Pass 1: plain paragraphs (doc.paragraphs) ---
     for para in doc.paragraphs:
         raw_text = para.text
         stripped = raw_text.strip()
@@ -354,11 +305,6 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
                 para, f"This statement of work completed on {completion_date}"
             )
 
-    # --- Pass 2: content controls (w:sdt) ---
-    # These are invisible to doc.paragraphs, so they need direct XML
-    # traversal. Common in Word's built-in cover-page templates (e.g.
-    # "Facet", "Ion", "Motion") where "Company Name" / subtitle fields
-    # are implemented as structured document tags, not plain text.
     for sdt in doc.element.body.iter(qn("w:sdt")):
         raw_text = _sdt_placeholder_text(sdt)
         if not raw_text:
@@ -367,13 +313,11 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         stripped = raw_text.strip()
         lowered = stripped.lower()
 
-        # 2a. Token syntax inside a content control
         new_text = _apply_token_syntax(raw_text, cover_fields, completion_date)
         if new_text is not None:
             _set_sdt_text(sdt, new_text)
             continue
 
-        # 2b. Tag/alias-based matching (most robust)
         tag = _sdt_tag_or_alias(sdt)
         if tag and tag in _SDT_TAG_FIELD_MAP:
             field_key = _SDT_TAG_FIELD_MAP[tag]
@@ -382,7 +326,6 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
                 _set_sdt_text(sdt, value)
             continue
 
-        # 2c. Literal displayed-text fallback
         if lowered in _LITERAL_PLACEHOLDER_LABELS:
             field_key = _LITERAL_PLACEHOLDER_LABELS[lowered]
             value = cover_fields.get(field_key, "")
@@ -402,38 +345,177 @@ def load_template(template_path: str) -> Document:
 
 
 # ----------------------------
+# CONTENT INSERTION HELPERS
+# ----------------------------
+def _find_body_placeholder(doc: Document, placeholder: str = _SOW_BODY_PLACEHOLDER):
+    for para in doc.paragraphs:
+        if placeholder in (para.text or ""):
+            return para
+    return None
+
+
+def _clear_placeholder_paragraph(paragraph):
+    if paragraph is None:
+        return
+    if paragraph.runs:
+        paragraph.runs[0].text = ""
+        for run in paragraph.runs[1:]:
+            run.text = ""
+    else:
+        paragraph.text = ""
+
+
+def _insert_paragraph_after(anchor: Paragraph, text: str = "", style=None) -> Paragraph:
+    new_p = anchor.insert_paragraph_before(text=text, style=style)
+    anchor._p.addnext(new_p._p)
+    return new_p
+
+
+def _add_inline_runs(paragraph, text: str):
+    parts = re.split(r"(\*\*.*?\*\*|\*.*?\*)", text)
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith("**") and part.endswith("**") and len(part) >= 4:
+            run = paragraph.add_run(part[2:-2])
+            run.bold = True
+        elif part.startswith("*") and part.endswith("*") and len(part) >= 2:
+            run = paragraph.add_run(part[1:-1])
+            run.italic = True
+        else:
+            paragraph.add_run(part)
+
+
+def _is_table_line(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("|") and s.endswith("|") and "|" in s[1:-1]
+
+
+def _is_table_separator(line: str) -> bool:
+    if not _is_table_line(line):
+        return False
+    cells = [c.strip() for c in line.strip().strip("|").split("|")]
+    return all(re.fullmatch(r":?-{3,}:?", c) for c in cells)
+
+
+def _split_table_row(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _insert_table_after(doc: Document, anchor: Paragraph, table_lines: list[str]) -> Paragraph:
+    rows = [_split_table_row(line) for line in table_lines if _is_table_line(line)]
+    if not rows:
+        return anchor
+
+    header = rows[0]
+    body = rows[2:] if len(rows) > 1 and _is_table_separator(table_lines[1]) else rows[1:]
+
+    table = doc.add_table(rows=1, cols=len(header))
+    try:
+        table.style = "Table Grid"
+    except Exception:
+        pass
+
+    for idx, value in enumerate(header):
+        cell_p = table.rows[0].cells[idx].paragraphs[0]
+        _add_inline_runs(cell_p, value)
+        for run in cell_p.runs:
+            run.bold = True
+
+    for row in body:
+        cells = table.add_row().cells
+        for idx, value in enumerate(row[:len(cells)]):
+            cell_p = cells[idx].paragraphs[0]
+            _add_inline_runs(cell_p, value)
+
+    anchor._p.addnext(table._tbl)
+    spacer = _insert_paragraph_after(anchor, "", style=None)
+    table._tbl.addnext(spacer._p)
+    return spacer
+
+
+# ----------------------------
 # ADD CONTENT TO DOCX
 # ----------------------------
 def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
-
     styles = _build_sow_styles(doc, for_pdf=for_pdf)
 
-    doc.add_page_break()
+    anchor = _find_body_placeholder(doc)
+    use_placeholder = anchor is not None
 
-    lines = markdown.split("\n")
+    if use_placeholder:
+        _clear_placeholder_paragraph(anchor)
+        current = anchor
+    else:
+        doc.add_page_break()
+        current = doc.paragraphs[-1]
 
-    for line in lines:
-        line = line.strip()
+    lines = markdown.splitlines()
+    i = 0
+
+    while i < len(lines):
+        raw = lines[i].rstrip("\n")
+        line = raw.strip()
+
         if not line:
+            i += 1
+            continue
+
+        if _is_table_line(line):
+            table_lines = [line]
+            i += 1
+            while i < len(lines) and _is_table_line(lines[i].strip()):
+                table_lines.append(lines[i].strip())
+                i += 1
+            current = _insert_table_after(doc, current, table_lines)
             continue
 
         if line.startswith("# "):
-            doc.add_paragraph(line[2:], style=styles["title"])
+            p = _insert_paragraph_after(current, "", style=styles["title"])
+            _add_inline_runs(p, line[2:].strip())
+            current = p
+            i += 1
+            continue
 
-        elif line.startswith("## "):
-            doc.add_paragraph(line[3:], style=styles["h1"])
+        if line.startswith("## "):
+            p = _insert_paragraph_after(current, "", style=styles["h1"])
+            _add_inline_runs(p, line[3:].strip())
+            current = p
+            i += 1
+            continue
 
-        elif line.startswith("### "):
-            doc.add_paragraph(line[4:], style=styles["h2"])
+        if line.startswith("### "):
+            p = _insert_paragraph_after(current, "", style=styles["h2"])
+            _add_inline_runs(p, line[4:].strip())
+            current = p
+            i += 1
+            continue
 
-        elif line.startswith("- "):
-            text = line[2:]
+        if re.match(r"^\d+\.\s+", line):
+            text = re.sub(r"^\d+\.\s+", "", line)
+            style = styles["number"] if styles["_has_native_number"] else styles["body"]
+            p = _insert_paragraph_after(current, "", style=style)
+            if not styles["_has_native_number"]:
+                text = f"{line}"
+            _add_inline_runs(p, text)
+            current = p
+            i += 1
+            continue
+
+        if line.startswith("- "):
+            text = line[2:].strip()
+            p = _insert_paragraph_after(current, "", style=styles["bullet"])
             if not styles["_has_native_bullet"]:
                 text = f"• {text}"
-            doc.add_paragraph(text, style=styles["bullet"])
+            _add_inline_runs(p, text)
+            current = p
+            i += 1
+            continue
 
-        else:
-            doc.add_paragraph(line, style=styles["body"])
+        p = _insert_paragraph_after(current, "", style=styles["body"])
+        _add_inline_runs(p, line)
+        current = p
+        i += 1
 
     return doc
 
@@ -446,16 +528,9 @@ def export_docx_from_template(template_path: str, sow_markdown: str,
                                for_pdf: bool = False) -> bytes:
 
     doc = load_template(template_path)
-
-    # Must happen BEFORE add_sow_content — it only touches the template's
-    # original paragraphs/content controls, and add_sow_content appends
-    # new paragraphs after a page break, so ordering keeps this safely
-    # scoped to the cover page.
     apply_cover_page_fields(doc, cover_fields)
-
     doc = add_sow_content(doc, sow_markdown, for_pdf=for_pdf)
 
     buffer = BytesIO()
     doc.save(buffer)
-
     return buffer.getvalue()

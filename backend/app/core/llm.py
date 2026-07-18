@@ -11,7 +11,7 @@ gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ---------------- OLLAMA ----------------
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
-OLLAMA_MODEL = "qwen2.5-coder:7b"
+OLLAMA_MODEL = "qwen2.5:7b"
 
 
 def _call_gemini(prompt: str) -> str:
