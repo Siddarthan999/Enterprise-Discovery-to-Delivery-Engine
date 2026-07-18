@@ -15,7 +15,15 @@ def clean_text(text: str) -> str:
 
 
 # ---------------- INGESTION ----------------
-def ingest_document(doc):
+def ingest_document(doc, category: str = "knowledge_base"):
+    """
+    category distinguishes what a document is FOR, separate from its file
+    TYPE (pdf/docx/etc). 'knowledge_base' (default) is what chat/search
+    query against. 'sow_history' is ingested through the same pipeline
+    but excluded from those by default — see hybrid_search.py — so
+    uploading historical SOWs for style/precedent reference doesn't leak
+    into unrelated chat answers.
+    """
     title = doc.get("title", "unknown")
     content = clean_text(doc.get("content", ""))
     doc_type = doc.get("type") or "unknown"
@@ -29,8 +37,8 @@ def ingest_document(doc):
         # 1. INSERT DOCUMENT
         doc_id = conn.execute(
             text("""
-                INSERT INTO documents (title, content, type, source, uploaded_at)
-                VALUES (:t, :c, :ty, :s, :u)
+                INSERT INTO documents (title, content, type, source, uploaded_at, category)
+                VALUES (:t, :c, :ty, :s, :u, :cat)
                 RETURNING id
             """),
             {
@@ -38,7 +46,8 @@ def ingest_document(doc):
                 "c": content,
                 "ty": doc_type,
                 "s": source,
-                "u": uploaded_at
+                "u": uploaded_at,
+                "cat": category
             }
         ).fetchone()[0]
 
@@ -90,17 +99,18 @@ def ingest_document(doc):
             MERGE (d:Document {id: $id})
             SET d.title = $title,
                 d.type = $type,
-                d.source = $source
+                d.source = $source,
+                d.category = $category
             """,
             id=doc_id,
             title=title,
             type=doc_type,
-            source=source
+            source=source,
+            category=category
         )
 
         for label, values in entities.items():
 
-            # SAFE label handling (prevents Cypher injection)
             safe_label = (
                 label[:-1].capitalize()
                 if label.endswith("s")
@@ -124,5 +134,6 @@ def ingest_document(doc):
         "chunks": len(chunks),
         "type": doc_type,
         "source": source,
+        "category": category,
         "uploaded_at": uploaded_at.isoformat()
     }
