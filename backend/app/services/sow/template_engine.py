@@ -118,7 +118,8 @@ def _detect_brand_profile(doc: Document) -> dict:
 
 def _get_or_create_style(doc: Document, name: str, font_name: str, size_pt: float,
                           bold: bool = False, color: RGBColor | None = None,
-                          base_style: str | None = None):
+                          base_style: str | None = None,
+                          space_before_pt: float = 0, space_after_pt: float = 0):
     if name in [s.name for s in doc.styles]:
         return doc.styles[name]
 
@@ -132,6 +133,11 @@ def _get_or_create_style(doc: Document, name: str, font_name: str, size_pt: floa
     style.font.bold = bold
     if color:
         style.font.color.rgb = color
+
+    # Fix 2: give heading-level styles real spacing above/below so numbered
+    # section headings don't render flush against surrounding body text.
+    style.paragraph_format.space_before = Pt(space_before_pt)
+    style.paragraph_format.space_after = Pt(space_after_pt)
 
     return style
 
@@ -155,19 +161,23 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
 
     styles["title"] = _get_or_create_style(
         doc, "SOW Title", title_font, title_size,
-        bold=True, color=profile["title_color"]
+        bold=True, color=profile["title_color"],
+        space_before_pt=0, space_after_pt=18,
     )
     styles["h1"] = _get_or_create_style(
         doc, "SOW Heading 1", title_font, h1_size,
-        bold=True, color=profile["title_color"]
+        bold=True, color=profile["title_color"],
+        space_before_pt=18, space_after_pt=8,
     )
     styles["h2"] = _get_or_create_style(
         doc, "SOW Heading 2", title_font, h2_size,
-        bold=profile["title_bold"], color=profile["body_color"]
+        bold=profile["title_bold"], color=profile["body_color"],
+        space_before_pt=12, space_after_pt=6,
     )
     styles["body"] = _get_or_create_style(
         doc, "SOW Body", body_font, body_size,
-        bold=False, color=profile["body_color"]
+        bold=False, color=profile["body_color"],
+        space_before_pt=0, space_after_pt=0,
     )
 
     has_list_style = "List Bullet" in [s.name for s in doc.styles]
@@ -175,6 +185,7 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
         doc, "SOW Bullet", body_font, body_size,
         bold=False, color=profile["body_color"],
         base_style="List Bullet" if has_list_style else None,
+        space_before_pt=0, space_after_pt=0,
     )
 
     has_number_style = "List Number" in [s.name for s in doc.styles]
@@ -182,6 +193,7 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
         doc, "SOW Number", body_font, body_size,
         bold=False, color=profile["body_color"],
         base_style="List Number" if has_number_style else None,
+        space_before_pt=0, space_after_pt=0,
     )
 
     styles["_has_native_bullet"] = has_list_style
@@ -221,6 +233,24 @@ def _set_paragraph_text_preserve_format(paragraph, new_text: str):
     paragraph.runs[0].text = new_text
     for run in paragraph.runs[1:]:
         run.text = ""
+
+
+def _remove_paragraph(paragraph):
+    """Fix 1: fully remove a paragraph from the document body, rather than
+    leaving a raw '[Company Name]' / 'Sub-Headline' placeholder visible when
+    no value was supplied for that field."""
+    p = paragraph._p
+    parent = p.getparent()
+    if parent is not None:
+        parent.remove(p)
+
+
+def _remove_sdt(sdt_element):
+    """Fix 1 (content-control variant): remove a w:sdt node entirely when its
+    mapped field has no value, instead of leaving the placeholder text in."""
+    parent = sdt_element.getparent()
+    if parent is not None:
+        parent.remove(sdt_element)
 
 
 def _sdt_placeholder_text(sdt_element) -> str:
@@ -283,6 +313,8 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         "completion_date", datetime.utcnow().strftime("%B %d, %Y")
     )
 
+    # doc.paragraphs is already a materialized list, so it's safe to mutate
+    # (remove paragraphs) while iterating it below.
     for para in doc.paragraphs:
         raw_text = para.text
         stripped = raw_text.strip()
@@ -298,6 +330,11 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_paragraph_text_preserve_format(para, value)
+            else:
+                # Fix 1: no value supplied -> remove the placeholder paragraph
+                # entirely instead of leaving "Sub-Headline" / "Company Name"
+                # sitting in the rendered document.
+                _remove_paragraph(para)
             continue
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
@@ -305,7 +342,10 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
                 para, f"This statement of work completed on {completion_date}"
             )
 
-    for sdt in doc.element.body.iter(qn("w:sdt")):
+    # doc.element.body.iter(qn("w:sdt")) is a *live* tree traversal, so it
+    # must be materialized into a list before we start removing nodes from
+    # the tree mid-iteration.
+    for sdt in list(doc.element.body.iter(qn("w:sdt"))):
         raw_text = _sdt_placeholder_text(sdt)
         if not raw_text:
             continue
@@ -324,6 +364,8 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_sdt_text(sdt, value)
+            else:
+                _remove_sdt(sdt)
             continue
 
         if lowered in _LITERAL_PLACEHOLDER_LABELS:
@@ -331,6 +373,8 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_sdt_text(sdt, value)
+            else:
+                _remove_sdt(sdt)
             continue
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
