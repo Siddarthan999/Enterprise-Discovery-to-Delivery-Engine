@@ -27,13 +27,28 @@ def compute_sow_confidence(
                     pass
 
         if similarities:
-            precedent_strength = round(sum(similarities) / len(similarities) * 100)
-            precedent_strength = max(0, min(precedent_strength, 100))
+            # Historical "score" values here come from hybrid_search's
+            # blended vector+keyword score, which can exceed 1.0 (base
+            # 1/(1+distance) plus up to +0.7 keyword boost) — clamp each
+            # individual similarity to [0, 1] BEFORE averaging, so one
+            # inflated match can't skew the whole precedent_strength.
+            clamped = [max(0.0, min(s, 1.0)) for s in similarities]
+            precedent_strength = round(sum(clamped) / len(clamped) * 100)
 
     risk_coverage = min(len(historical_risks) * 12, 100)
 
-    red_flag_penalty = min(len(review_result.get("red_flags", [])) * 8, 40)
-    required_edit_penalty = min(len(review_result.get("required_edits", [])) * 6, 36)
+    red_flags = review_result.get("red_flags", [])
+    required_edits = review_result.get("required_edits", [])
+
+    # Reduced per-item weight and lower caps — 5 reviewer agents each
+    # flagging a couple of legitimate issues is NORMAL, not a sign the
+    # SOW is unusable. The previous caps (40 + 36 = 76) were close
+    # enough to the full positive ceiling (100) that a completely
+    # ordinary review (7-8 combined flags/findings) could zero out even
+    # an 80+ average agent score. These caps now leave enough headroom
+    # for a solid avg_agent_score to still land in a sensible range.
+    red_flag_penalty = min(len(red_flags) * 4, 20)
+    required_edit_penalty = min(len(required_edits) * 3, 18)
 
     overall_confidence = round(
         (avg_agent_score * 0.55)
@@ -53,14 +68,24 @@ def compute_sow_confidence(
     else:
         label = "low"
 
+    components = {
+        "avg_agent_score": avg_agent_score,
+        "precedent_strength": precedent_strength,
+        "risk_coverage": risk_coverage,
+        "red_flag_penalty": red_flag_penalty,
+        "required_edit_penalty": required_edit_penalty,
+        "red_flag_count": len(red_flags),
+        "required_edit_count": len(required_edits),
+    }
+
+    # TEMP DEBUG — remove once you've confirmed the new balance feels
+    # right across a few real generations. Shows exactly what pushed
+    # the score wherever it landed.
+    # print(f"DEBUG confidence components: {components}")
+    # print(f"DEBUG overall_confidence (pre-clamp calc used above): {overall_confidence}")
+
     return {
         "overall_confidence": overall_confidence,
         "label": label,
-        "components": {
-            "avg_agent_score": avg_agent_score,
-            "precedent_strength": precedent_strength,
-            "risk_coverage": risk_coverage,
-            "red_flag_penalty": red_flag_penalty,
-            "required_edit_penalty": required_edit_penalty,
-        }
+        "components": components,
     }

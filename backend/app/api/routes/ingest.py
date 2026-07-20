@@ -7,7 +7,7 @@ from app.core.postgres import engine
 import shutil
 import os
 
-router = APIRouter()
+router = APIRouter(tags=["ingest"])
 
 
 @router.post("/ingest/document")

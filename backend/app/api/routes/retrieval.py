@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 from app.core.postgres import engine
 
-router = APIRouter()
+router = APIRouter(tags=["retrieval"])
 
 @router.get("/search")
 def search(query: str):

@@ -14,6 +14,8 @@ from app.api.routes.export import router as export_router
 from app.api.routes import template
 from app.api.routes import debug_search
 from app.api.routes.sow_history import router as sow_history_router
+from app.api.routes import sow_authors
+from app.api.routes import sow_approval
 
 app = FastAPI(title="Enterprise OS")
 
@@ -38,6 +40,8 @@ app.include_router(export_router, prefix="/api")
 app.include_router(template.router, prefix="/api/template")
 app.include_router(debug_search.router, prefix="/api")
 app.include_router(sow_history_router, prefix="/api")
+app.include_router(sow_authors.router, prefix="/api")
+app.include_router(sow_approval.router, prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,

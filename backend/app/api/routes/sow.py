@@ -13,6 +13,7 @@ from app.services.sow_history.sow_history_search import (
 )
 from app.services.sow_agents.sow_review_orchestrator import review_sow_draft
 from app.services.sow_agents.sow_confidence import compute_sow_confidence
+from app.services.sow.save_sow import save_generated_sow
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ class SOWRequest(BaseModel):
     state: dict | None = None
     template_id: str | None = None
     transcript: str | None = None
+    author_id: int | None = None
 
 
 class ContactRow(BaseModel):
@@ -756,19 +758,44 @@ def generate_sow(payload: SOWRequest):
         draft_markdown=review_markdown,
     )
 
+    historical_sows_used = [
+        {
+            "doc_id": s.get("doc_id"),
+            "title": s.get("title"),
+            "score": s.get("score"),
+        }
+        for s in historical_sows
+    ]
+
+    # Persist the generated SOW as version 1, tied to whichever author was
+    # selected in the UI, along with the reviewer agent output and
+    # confidence score for THIS version — so scrolling back through
+    # history later still shows what the reviewers said at the time.
+    sow_id = None
+    version_id = None
+    try:
+        save_result = save_generated_sow(
+            title=project_name,
+            markdown=review_markdown,
+            author_id=payload.author_id,
+            review=review,
+            confidence=confidence,
+            historical_sows_used=historical_sows_used,
+            historical_risks_considered=historical_risks,
+        )
+        sow_id = save_result["sow_id"]
+        version_id = save_result["version_id"]
+    except Exception as e:
+        print(f"⚠️ Failed to save generated SOW to database: {e}")
+
     return {
+        "sow_id": sow_id,
+        "version_id": version_id,
         "project_name": project_name,
         "template_id": payload.template_id,
         "structured_sow": structured_sow.model_dump(),
         "sow": review_markdown,
-        "historical_sows_used": [
-            {
-                "doc_id": s.get("doc_id"),
-                "title": s.get("title"),
-                "score": s.get("score"),
-            }
-            for s in historical_sows
-        ],
+        "historical_sows_used": historical_sows_used,
         "historical_risks_considered": historical_risks,
         "review": review,
         "confidence": confidence,
