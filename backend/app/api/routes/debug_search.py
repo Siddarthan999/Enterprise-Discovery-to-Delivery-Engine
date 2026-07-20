@@ -17,7 +17,7 @@ from fastapi import APIRouter
 from app.services.hybrid_search import hybrid_search
 from app.services.rag import RELEVANCE_THRESHOLD
 
-router = APIRouter()
+router = APIRouter(tags=["debug search"])
 
 
 @router.get("/debug/search")

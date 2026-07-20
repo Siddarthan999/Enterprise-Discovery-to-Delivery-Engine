@@ -5,7 +5,7 @@ import uuid
 
 from app.services.rag import generate_answer
 
-router = APIRouter()
+router = APIRouter(tags=["answer"])
 
 
 class QuestionRequest(BaseModel):

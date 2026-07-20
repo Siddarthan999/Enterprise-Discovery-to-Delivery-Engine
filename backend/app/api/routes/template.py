@@ -6,7 +6,7 @@ from app.services.sow.template_storage import (
 )
 from app.services.sow.template_parser import extract_sections
 
-router = APIRouter()
+router = APIRouter(tags=["templates"])
 
 
 @router.post("/upload")

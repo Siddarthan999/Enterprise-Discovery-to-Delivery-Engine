@@ -4,7 +4,7 @@ import tempfile
 import os
 from pydantic import BaseModel
 
-router = APIRouter()
+router = APIRouter(tags=["transcripts"])
 
 
 @router.post("/transcript/upload")

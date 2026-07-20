@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Sparkles, Download, ChevronRight, Layers } from "lucide-react";
+import { FileText, Sparkles, Download, ChevronRight, Layers, Plus, Trash2, Check, X} from "lucide-react";
 import TranscriptPanel from "@/components/sow/TranscriptPanel";
 import DiscoveryPanel from "@/components/sow/DiscoveryPanel";
 import SowViewer from "@/components/sow/SowViewer";
 import ExportPanel from "@/components/sow/ExportPanel";
 import AppNav from "@/components/layout/AppNav";
-import { getTemplates } from "@/lib/api";
+import { getTemplates, getAuthors, addAuthor, deleteAuthor } from "@/lib/api";
 import ReviewPanel from "@/components/sow/ReviewPanel";
 
 type Step = {
@@ -26,6 +26,10 @@ export default function SOWPage() {
   const [confidence, setConfidence] = useState<any>(null);
   const [historicalSowsUsed, setHistoricalSowsUsed] = useState<any[]>([]);
   const [historicalRisksConsidered, setHistoricalRisksConsidered] = useState<any[]>([]);
+  const [authors, setAuthors] = useState<any[]>([]);
+  const [selectedAuthor, setSelectedAuthor] = useState<number | "">("");
+  const [newAuthor, setNewAuthor] = useState("");
+  const [showNewAuthor, setShowNewAuthor] = useState(false);
 
   useEffect(() => {
     async function loadTemplates() {
@@ -37,6 +41,17 @@ export default function SOWPage() {
     }
 
     loadTemplates();
+    async function loadAuthors() {
+      const data = await getAuthors();
+
+      setAuthors(data);
+
+      if (data.length > 0) {
+        setSelectedAuthor(data[0].id);
+      }
+    }
+
+    loadAuthors();
   }, []);
 
   const steps: Step[] = [
@@ -44,6 +59,34 @@ export default function SOWPage() {
     { label: "Discovery", icon: <Sparkles size={14} />, done: !!state },
     { label: "Export", icon: <Download size={14} />, done: !!sow },
   ];
+
+  async function handleAddAuthor() {
+    if (!newAuthor.trim()) return;
+    await addAuthor(newAuthor);
+    const data = await getAuthors();
+    setAuthors(data);
+    const added = data.find(
+      (a: any) => a.name === newAuthor.trim()
+    );
+    if (added) {
+      setSelectedAuthor(added.id);
+    }
+    setNewAuthor("");
+    setShowNewAuthor(false);
+  }
+
+  async function handleDeleteAuthor() {
+    if (!selectedAuthor) return;
+    if (!confirm("Delete this author?")) return;
+    await deleteAuthor(Number(selectedAuthor));
+    const data = await getAuthors();
+    setAuthors(data);
+    if (data.length) {
+      setSelectedAuthor(data[0].id);
+    } else {
+      setSelectedAuthor("");
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_45%),_linear-gradient(135deg,_#050816_0%,_#0b1120_45%,_#020617_100%)] text-white">
@@ -100,20 +143,86 @@ export default function SOWPage() {
 
         {/* Template selector */}
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-zinc-900/80 p-4 shadow-lg shadow-black/20">
-          <label className="text-sm text-zinc-400">Template</label>
+          <label className="text-sm text-zinc-400">
+            Template
+          </label>
 
           <select
             value={selectedTemplate}
             onChange={(e) => setSelectedTemplate(e.target.value)}
-            className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white outline-none focus:border-[#c90c61]/50"
+            className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
           >
-            {templates.length === 0 && <option value="">No templates uploaded</option>}
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
           </select>
+
+          <label className="ml-6 text-sm text-zinc-400">
+            Author
+          </label>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedAuthor}
+              onChange={(e) => setSelectedAuthor(Number(e.target.value))}
+              className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
+            >
+              {authors.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+
+            {!showNewAuthor ? (
+              <>
+                <button
+                  onClick={() => setShowNewAuthor(true)}
+                  className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-[#c90c61] hover:text-[#c90c61]"
+                  title="Add author"
+                >
+                  <Plus size={16} />
+                </button>
+
+                <button
+                  onClick={handleDeleteAuthor}
+                  className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-500 hover:text-red-400"
+                  title="Delete author"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={newAuthor}
+                  onChange={(e) => setNewAuthor(e.target.value)}
+                  placeholder="Author name"
+                  className="w-40 rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
+                />
+
+                <button
+                  onClick={handleAddAuthor}
+                  className="rounded-lg border border-emerald-500/40 p-2 text-emerald-400 transition hover:bg-emerald-500/10"
+                >
+                  <Check size={16} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowNewAuthor(false);
+                    setNewAuthor("");
+                  }}
+                  className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </div>
 
           {templates.length === 0 && (
             <span className="text-xs text-zinc-500">
@@ -128,6 +237,8 @@ export default function SOWPage() {
 
           <DiscoveryPanel
             transcript={transcript}
+            authorId={selectedAuthor}
+            templateId={selectedTemplate}
             state={state}
             setState={setState}
             setSow={setSow}

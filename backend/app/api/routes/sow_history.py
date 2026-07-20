@@ -13,7 +13,7 @@ from app.core.embedding import get_embedding
 from app.core.postgres import engine
 from app.core.neo4j import driver
 
-router = APIRouter()
+router = APIRouter(tags=["sow history"])
 
 
 @router.post("/sow-history/upload")

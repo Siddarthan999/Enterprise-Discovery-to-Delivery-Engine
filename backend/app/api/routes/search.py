@@ -34,7 +34,7 @@
 from fastapi import APIRouter
 from app.services.hybrid_search import hybrid_search
 
-router = APIRouter()
+router = APIRouter(tags=["search"])
 
 
 @router.get("/search")

@@ -37,6 +37,11 @@ DETACH DELETE n;
 ### PostgreSQL
 `docker exec -it enterprisediscovery-to-deliveryengine-postgres-1 psql -U postgres -d enterprise`
 
+To list all the rows/data in a table
+```
+SELECT * FROM sow_documents;
+```
+
 To delete all the data's from the DB
 ```
 DELETE FROM document_chunks;
@@ -48,10 +53,9 @@ Run this cmd for issues in GPU layer and ollama isn't running:<br>
 `set OLLAMA_NO_GPU=1`
 
 Install the Model:<br>
-`ollama pull  qwen2.5:7b`
+`ollama pull  qwen2.5:7b` <br>
 `ollama pull qwen2.5-coder:3b` or `7b`
 
 Run the Model:<br>
-`ollama run qwen2.5:7b `
-
+`ollama run qwen2.5:7b` <br>
 `ollama run qwen2.5-coder:3b` or `7b`
