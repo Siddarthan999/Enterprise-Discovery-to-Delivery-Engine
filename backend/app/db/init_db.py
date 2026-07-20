@@ -77,3 +77,78 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_sow_risk_examples_source_doc
             ON sow_risk_examples (source_doc_id)
         """))
+        
+        # ---------------- SOW AUTHORS ----------------
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sow_authors (
+            id SERIAL PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """))
+
+        # ---------------- SOW DOCUMENTS ----------------
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sow_documents (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            author_id INT REFERENCES sow_authors(id),
+            current_version INT DEFAULT 1,
+            current_stage TEXT DEFAULT 'Architect',
+            status TEXT DEFAULT 'Pending',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        """))
+
+        # ---------------- SOW VERSIONS ----------------
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sow_versions (
+            id SERIAL PRIMARY KEY,
+            sow_id INT REFERENCES sow_documents(id) ON DELETE CASCADE,
+            version INT NOT NULL,
+            markdown TEXT,
+            created_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+
+            -- Reviewer output for this version
+            review JSONB,
+
+            -- Confidence scores and reasoning
+            confidence JSONB,
+
+            -- Historical references used during review
+            historical_sows_used JSONB,
+            historical_risks_considered JSONB,
+
+            UNIQUE (sow_id, version)
+        )
+        """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sow_comments (
+            id SERIAL PRIMARY KEY,
+            sow_id INT REFERENCES sow_documents(id) ON DELETE CASCADE,
+            version INT,
+            reviewer_role TEXT,
+            section TEXT,
+            comment TEXT,
+            status TEXT DEFAULT 'Open',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """))
+
+        conn.execute(text("""
+        ALTER TABLE sow_comments
+        ADD COLUMN IF NOT EXISTS selected_text TEXT
+        """))
+
+        conn.execute(text("""
+        ALTER TABLE sow_comments
+        ADD COLUMN IF NOT EXISTS start_offset INT
+        """))
+
+        conn.execute(text("""
+        ALTER TABLE sow_comments
+        ADD COLUMN IF NOT EXISTS end_offset INT
+        """))

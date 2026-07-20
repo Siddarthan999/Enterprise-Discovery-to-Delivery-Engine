@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from app.services.sow.project_extractor import extract_project_state
 from app.services.sow.project_state_service import save_project_state
 
-router = APIRouter()
+router = APIRouter(tags=["discovery"])
 
 
 class DiscoveryRequest(BaseModel):

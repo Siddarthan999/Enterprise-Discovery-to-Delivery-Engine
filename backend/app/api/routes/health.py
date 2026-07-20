@@ -4,7 +4,7 @@ from app.core.postgres import check_postgres
 from app.core.neo4j import check_neo4j
 from app.core.gemini import check_gemini
 
-router = APIRouter()
+router = APIRouter(tags=["health"])
 
 
 @router.get("/health/postgres")
