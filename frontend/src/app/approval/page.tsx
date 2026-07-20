@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, Layers } from "lucide-react";
+import { Trash2, FileX, Layers } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 
 import SowList from "@/components/approval/SowList";
@@ -218,7 +218,7 @@ export default function ApprovalPage() {
                       title={`Delete Version ${selectedVersion}`}
                       className="inline-flex items-center justify-center rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={15} />
                     </button>
                   )}
 
@@ -227,7 +227,7 @@ export default function ApprovalPage() {
                     title="Delete entire SOW"
                     className="inline-flex items-center justify-center rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-600/60 hover:bg-red-600/10 hover:text-red-500"
                   >
-                    <Trash2 size={16} />
+                    <FileX size={15} />
                   </button>
                 </div>
               </div>
