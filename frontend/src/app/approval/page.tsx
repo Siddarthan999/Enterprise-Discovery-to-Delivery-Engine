@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, FileX, Layers } from "lucide-react";
+import { ClipboardCheck, Trash2, FileX, Check } from "lucide-react";
 import AppNav from "@/components/layout/AppNav";
 
 import SowList from "@/components/approval/SowList";
@@ -138,43 +138,103 @@ export default function ApprovalPage() {
     await loadSows();
   }
 
+  const currentStage: string | undefined = selectedSow?.document?.current_stage;
+  const documentStatus: string | undefined = selectedSow?.document?.status;
+  const currentStageIndex = currentStage ? ROLES.indexOf(currentStage) : -1;
+  const isFullyApproved = documentStatus === "Approved";
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_45%),_linear-gradient(135deg,_#050816_0%,_#0b1120_45%,_#020617_100%)] text-white">
       <AppNav />
 
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
 
         {/* Header */}
-        <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
-              <Layers size={20} />
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-950/20">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
+                <ClipboardCheck size={20} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold text-white">
+                  Approval Workflow
+                </h1>
+                <p className="mt-0.5 text-sm text-zinc-400">
+                  Review generated SOWs, leave comments and progress approvals.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-semibold">Approval Workflow</h1>
-              <p className="mt-0.5 text-sm text-zinc-400">
-                Review generated SOWs, leave comments and progress approvals.
-              </p>
+
+            {/* Viewer role selector */}
+            <div className="flex shrink-0 items-center gap-2">
+              <label className="text-xs text-zinc-500">Viewing as</label>
+              <select
+                value={viewerRole}
+                onChange={(e) => setViewerRole(e.target.value)}
+                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-sm outline-none focus:border-cyan-500/50"
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-zinc-500">Viewing as</label>
-            <select
-              value={viewerRole}
-              onChange={(e) => setViewerRole(e.target.value)}
-              className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-cyan-500/50"
-            >
-              {ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Stage pipeline — shows where the selected document sits in
+              the approval chain, at a glance, instead of burying that
+              info in a plain status badge. */}
+          {selectedSow && (
+            <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
+              {ROLES.map((role, i) => {
+                const isDone = isFullyApproved || i < currentStageIndex;
+                const isActive = !isFullyApproved && i === currentStageIndex;
+                const isPending = !isDone && !isActive;
+
+                return (
+                  <div key={role} className="flex flex-1 items-center gap-1">
+                    <div className="flex flex-1 flex-col items-center gap-1 min-w-[72px]">
+                      <div
+                        className={`flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-medium transition ${
+                          isDone
+                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                            : isActive
+                            ? "border-[#c90c61]/50 bg-[#c90c61]/15 text-[#c90c61] ring-2 ring-[#c90c61]/20"
+                            : "border-white/10 bg-zinc-900 text-zinc-600"
+                        }`}
+                      >
+                        {isDone ? <Check size={12} /> : i + 1}
+                      </div>
+                      <span
+                        className={`whitespace-nowrap text-[11px] ${
+                          isActive
+                            ? "font-medium text-white"
+                            : isDone
+                            ? "text-zinc-400"
+                            : "text-zinc-600"
+                        }`}
+                      >
+                        {role}
+                      </span>
+                    </div>
+
+                    {i < ROLES.length - 1 && (
+                      <div
+                        className={`mb-3.5 h-px flex-1 ${
+                          isDone ? "bg-emerald-500/40" : "bg-white/10"
+                        }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-12 gap-6">
+        <div className="mt-6 grid grid-cols-12 gap-6">
 
           {/* Left */}
           <div className="col-span-4">
@@ -197,7 +257,7 @@ export default function ApprovalPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <select
                     value={selectedVersion ?? ""}
                     onChange={(e) =>
@@ -216,18 +276,22 @@ export default function ApprovalPage() {
                     <button
                       onClick={handleDeleteVersion}
                       title={`Delete Version ${selectedVersion}`}
-                      className="inline-flex items-center justify-center rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+                      className="group flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-zinc-400 transition hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-400"
                     >
                       <Trash2 size={15} />
+                      <span className="text-xs">Version</span>
                     </button>
                   )}
 
+                  <div className="h-6 w-px bg-white/10" />
+
                   <button
                     onClick={handleDeleteSow}
-                    title="Delete entire SOW"
-                    className="inline-flex items-center justify-center rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-600/60 hover:bg-red-600/10 hover:text-red-500"
+                    title="Delete entire SOW and all versions"
+                    className="group flex items-center gap-1.5 rounded-lg border border-red-900/40 bg-red-950/20 px-2.5 py-2 text-red-400 transition hover:border-red-500/60 hover:bg-red-500/15 hover:text-red-300"
                   >
                     <FileX size={15} />
+                    <span className="text-xs font-medium">Delete SOW</span>
                   </button>
                 </div>
               </div>
