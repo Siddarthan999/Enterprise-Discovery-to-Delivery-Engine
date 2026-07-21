@@ -228,3 +228,9 @@ export const deleteComment = (id:number, reviewerRole:string)=>
 
 export const updateSowVersion = (payload: any) =>
   API.post("/approval/update-version", payload).then(res => res.data);
+
+export const updateSowTitle = (payload: any) =>
+  API.post("/approval/update-title", payload).then(res => res.data);
+
+export const compareVersions = (sowId: number, v1: number, v2: number) =>
+  API.get(`/approval/sows/${sowId}/compare/${v1}/${v2}`).then(res => res.data);
