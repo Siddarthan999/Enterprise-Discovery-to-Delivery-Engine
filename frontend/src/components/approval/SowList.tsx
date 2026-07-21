@@ -44,7 +44,7 @@ export default function SowList({
 
   return (
     <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-3">
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="dark-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
         {sows.map((sow) => {
           const selected = sow.id === selectedId;
 
