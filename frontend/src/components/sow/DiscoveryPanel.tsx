@@ -173,7 +173,7 @@ export default function DiscoveryPanel({
           </button>
 
           {showDetails && (
-            <pre className="max-h-64 overflow-auto border-t border-zinc-800 p-4 text-xs text-zinc-300">
+            <pre className="dark-scrollbar max-h-64 overflow-auto border-t border-zinc-800 p-4 text-xs text-zinc-300">
               {JSON.stringify(state, null, 2)}
             </pre>
           )}

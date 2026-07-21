@@ -9,14 +9,14 @@ type Props = {
   onSelect: (id: number) => void;
 };
 
-function statusColor(status: string) {
+function statusDot(status: string) {
   switch (status) {
     case "Approved":
-      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+      return "bg-emerald-400";
     case "Pending":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/30";
+      return "bg-amber-400";
     default:
-      return "bg-zinc-700/20 text-zinc-400 border-zinc-700";
+      return "bg-zinc-500";
   }
 }
 
@@ -26,68 +26,68 @@ export default function SowList({
   selectedId,
   onSelect,
 }: Props) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/70">
-      <div className="border-b border-white/10 px-5 py-3.5">
-        <h2 className="text-sm font-semibold text-white">Generated SOWs</h2>
-        <p className="mt-0.5 text-xs text-zinc-500">
-          Select a document to review
-        </p>
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/70 px-5 py-4 text-sm text-zinc-500">
+        Loading SOWs...
       </div>
+    );
+  }
 
-      {loading ? (
-        <div className="p-6 text-sm text-zinc-500">Loading...</div>
-      ) : sows.length === 0 ? (
-        <div className="p-6 text-sm text-zinc-500">
-          No generated SOWs found.
-        </div>
-      ) : (
-        <div className="max-h-[calc(100vh-260px)] divide-y divide-white/5 overflow-y-auto">
-          {sows.map((sow) => {
-            const selected = sow.id === selectedId;
+  if (sows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-zinc-900/70 px-5 py-4 text-sm text-zinc-500">
+        No generated SOWs found.
+      </div>
+    );
+  }
 
-            return (
-              <button
-                key={sow.id}
-                onClick={() => onSelect(sow.id)}
-                className={`w-full px-5 py-3.5 text-left transition ${
-                  selected ? "bg-cyan-500/10" : "hover:bg-white/5"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-medium text-white">
-                      {sow.title}
-                    </h3>
+  return (
+    <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-3">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {sows.map((sow) => {
+          const selected = sow.id === selectedId;
 
-                    <p className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-                      <User size={11} />
-                      {sow.author ?? "Unknown"}
-                      <span className="text-zinc-700">·</span>
-                      v{sow.current_version}
-                    </p>
-                  </div>
+          return (
+            <button
+              key={sow.id}
+              onClick={() => onSelect(sow.id)}
+              className={`flex w-[220px] shrink-0 flex-col gap-1.5 rounded-xl border px-3.5 py-2.5 text-left transition ${
+                selected
+                  ? "border-cyan-500/40 bg-cyan-500/10"
+                  : "border-white/5 bg-white/[0.02] hover:border-white/15 hover:bg-white/5"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="min-w-0 truncate text-sm font-medium text-white">
+                  {sow.title}
+                </h3>
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(
+                    sow.status
+                  )}`}
+                  title={sow.status}
+                />
+              </div>
 
-                  <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${statusColor(
-                      sow.status
-                    )}`}
-                  >
-                    {sow.status}
-                  </span>
-                </div>
+             <div className="flex items-center text-[11px] text-zinc-500">
+                <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+                  <User size={10} className="shrink-0" />
+                  <span className="truncate">{sow.author ?? "Unknown"}</span>
+                </span>
 
-                <div className="mt-2.5 flex items-center justify-between">
-                  <span className="text-xs text-zinc-500">Current Stage</span>
-                  <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-cyan-300">
+                <div className="ml-2 flex items-center gap-2 shrink-0">
+                  <span>v{sow.current_version}</span>
+
+                  <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-300">
                     {sow.current_stage}
                   </span>
                 </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+            </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

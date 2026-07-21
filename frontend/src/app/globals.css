@@ -24,3 +24,124 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.sow-diff-scope table.diff {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: #d4d4d8;
+  background: transparent;
+}
+
+.sow-diff-scope table.diff th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #a1a1aa;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+}
+
+.sow-diff-scope table.diff td {
+  padding: 3px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Line-number gutter columns */
+.sow-diff-scope table.diff td.diff_header {
+  color: #52525b;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: right;
+  user-select: none;
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* The small "skip N lines" link column between blocks */
+.sow-diff-scope table.diff .diff_next {
+  background: rgba(255, 255, 255, 0.02);
+  color: #52525b;
+  text-align: center;
+  width: 1%;
+}
+.sow-diff-scope table.diff .diff_next a {
+  color: #22d3ee;
+  text-decoration: none;
+}
+
+/* Inline change highlights — recolored to fit the app's
+    emerald/amber/rose palette instead of difflib's harsh
+    saturated green/yellow/red defaults */
+.sow-diff-scope table.diff .diff_add {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+  border-radius: 2px;
+}
+.sow-diff-scope table.diff .diff_chg {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fcd34d;
+  border-radius: 2px;
+}
+.sow-diff-scope table.diff .diff_sub {
+  background: rgba(244, 63, 94, 0.25);
+  color: #fda4af;
+  border-radius: 2px;
+  text-decoration: line-through;
+  text-decoration-color: rgba(253, 164, 175, 0.5);
+}
+
+/* difflib emits an empty spacer table row between the
+    legend and content in some versions — collapse it so it
+    doesn't show as an ugly blank white/dark gap */
+.sow-diff-scope table.diff tr:first-child td:empty,
+.sow-diff-scope table.diff tr:first-child th:empty {
+  display: none;
+}
+
+/* Brief pulsing ring on whichever change we auto-scroll to,
+   so the eye lands on it immediately after "View diff" */
+.sow-diff-scope .diff-jump-highlight {
+  outline: 2px solid #22d3ee;
+  outline-offset: 1px;
+  animation: diff-jump-pulse 2.2s ease-out;
+}
+
+@keyframes diff-jump-pulse {
+  0% {
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0);
+  }
+}
+
+.dark-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #52525b #18181b;
+}
+
+.dark-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark-scrollbar::-webkit-scrollbar-track {
+  background: #18181b;
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb {
+  background: #52525b;
+  border-radius: 9999px;
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
