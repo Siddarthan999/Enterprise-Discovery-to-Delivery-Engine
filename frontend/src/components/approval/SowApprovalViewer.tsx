@@ -162,7 +162,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
     return (
       <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-8">
         <p className="text-zinc-500">
-          Select a SOW from the left panel.
+          Select a SOW from the above panel.
         </p>
       </div>
     );

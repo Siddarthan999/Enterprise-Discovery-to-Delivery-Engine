@@ -55,7 +55,7 @@ export default function SOWPage() {
   }, []);
 
   const steps: Step[] = [
-    { label: "Transcript", icon: <FileText size={14} />, done: !!transcript },
+    { label: "Context", icon: <FileText size={14} />, done: !!transcript },
     { label: "Discovery", icon: <Sparkles size={14} />, done: !!state },
     { label: "Export", icon: <Download size={14} />, done: !!sow },
   ];
