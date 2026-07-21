@@ -221,7 +221,7 @@ export const deleteSow = (id: number) =>
   API.delete(`/approval/sows/${id}`).then((res) => res.data);
 
 export const deleteVersion = (sowId: number, version: number) =>
-  API.delete(`/approval/sows/${sowId}/versions/${version}`).then((res) => res.data);
+  API.delete(`/approval/sows/${sowId}/version/${version}`).then((res) => res.data);
 
 export const deleteComment = (id:number, reviewerRole:string)=>
   API.delete(`/approval/comment/${id}`,{ params:{ reviewer_role:reviewerRole }}).then(res=>res.data);
