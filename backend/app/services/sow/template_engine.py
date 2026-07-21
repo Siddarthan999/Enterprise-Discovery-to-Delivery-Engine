@@ -5,6 +5,7 @@ from datetime import datetime
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.style import WD_STYLE_TYPE
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from io import BytesIO
@@ -118,7 +119,8 @@ def _detect_brand_profile(doc: Document) -> dict:
 
 def _get_or_create_style(doc: Document, name: str, font_name: str, size_pt: float,
                           bold: bool = False, color: RGBColor | None = None,
-                          base_style: str | None = None):
+                          base_style: str | None = None,
+                          space_before_pt: float = 0, space_after_pt: float = 0):
     if name in [s.name for s in doc.styles]:
         return doc.styles[name]
 
@@ -132,6 +134,11 @@ def _get_or_create_style(doc: Document, name: str, font_name: str, size_pt: floa
     style.font.bold = bold
     if color:
         style.font.color.rgb = color
+
+    # Give heading-level styles real spacing above/below so numbered section
+    # headings don't render flush against surrounding body text.
+    style.paragraph_format.space_before = Pt(space_before_pt)
+    style.paragraph_format.space_after = Pt(space_after_pt)
 
     return style
 
@@ -155,19 +162,23 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
 
     styles["title"] = _get_or_create_style(
         doc, "SOW Title", title_font, title_size,
-        bold=True, color=profile["title_color"]
+        bold=True, color=profile["title_color"],
+        space_before_pt=0, space_after_pt=18,
     )
     styles["h1"] = _get_or_create_style(
         doc, "SOW Heading 1", title_font, h1_size,
-        bold=True, color=profile["title_color"]
+        bold=True, color=profile["title_color"],
+        space_before_pt=18, space_after_pt=8,
     )
     styles["h2"] = _get_or_create_style(
         doc, "SOW Heading 2", title_font, h2_size,
-        bold=profile["title_bold"], color=profile["body_color"]
+        bold=profile["title_bold"], color=profile["body_color"],
+        space_before_pt=16, space_after_pt=6,
     )
     styles["body"] = _get_or_create_style(
         doc, "SOW Body", body_font, body_size,
-        bold=False, color=profile["body_color"]
+        bold=False, color=profile["body_color"],
+        space_before_pt=0, space_after_pt=6,
     )
 
     has_list_style = "List Bullet" in [s.name for s in doc.styles]
@@ -175,6 +186,7 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
         doc, "SOW Bullet", body_font, body_size,
         bold=False, color=profile["body_color"],
         base_style="List Bullet" if has_list_style else None,
+        space_before_pt=0, space_after_pt=4,
     )
 
     has_number_style = "List Number" in [s.name for s in doc.styles]
@@ -182,6 +194,7 @@ def _build_sow_styles(doc: Document, for_pdf: bool = False) -> dict:
         doc, "SOW Number", body_font, body_size,
         bold=False, color=profile["body_color"],
         base_style="List Number" if has_number_style else None,
+        space_before_pt=0, space_after_pt=4,
     )
 
     styles["_has_native_bullet"] = has_list_style
@@ -212,6 +225,63 @@ _SDT_TAG_FIELD_MAP = {
 
 _COMPLETED_ON_PREFIX = "this statement of work completed on"
 
+# Cover pages should never show a numbered section title (e.g.
+# "1. CONTACT INFORMATION") as the subtitle -- that's body content that
+# belongs after the cover page, not cover-page filler. Some templates ship
+# with exactly this kind of text hardcoded as static cover-page content
+# (independent of any placeholder field), which then visually duplicates
+# the real section heading once the SOW body is merged in below it. This
+# pattern catches that regardless of *why* the stray text is there, since
+# there's no legitimate reason a cover subtitle should look like this.
+_STRAY_SECTION_HEADING_RE = re.compile(r"^\d+\.\s*[A-Z][A-Z0-9\s&/\-,]*$")
+
+# Keep this list in sync with MANDATORY_SOW_SECTIONS in sow.py. It's used
+# as the *primary, deterministic* check below -- an exact (whitespace- and
+# case-insensitive) match against a known section title is a much more
+# reliable signal than the generic regex alone, which can be defeated by
+# things a generic pattern doesn't anticipate (curly punctuation, a missing
+# space after the number, a non-breaking space inserted by Word, etc).
+_KNOWN_SOW_SECTION_TITLES = [
+    "Contact Information",
+    "Engagement Objectives & Scope",
+    "Customer Obligations and Expectations",
+    "Out-of-Scope & Change Orders",
+    "Schedule and Fees",
+    "Expenses",
+    "Invoices",
+]
+
+
+def _normalize_heading_text(text: str) -> str:
+    """Collapse non-breaking spaces / tabs / repeated whitespace so minor
+    template-authoring differences (e.g. a NBSP after the "1.") can't
+    defeat comparison against the known section titles."""
+    text = (text or "").replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+_KNOWN_SECTION_TITLES_NORMALIZED = {
+    _normalize_heading_text(t).lower() for t in _KNOWN_SOW_SECTION_TITLES
+}
+
+
+def _looks_like_stray_section_heading(text: str) -> bool:
+    normalized = _normalize_heading_text(text)
+    if not normalized:
+        return False
+
+    # Primary path: strip any leading "N." / "N)" numbering and compare the
+    # remainder directly against the known section titles. This is what
+    # reliably catches "1. CONTACT INFORMATION" regardless of exact
+    # formatting quirks in how the template happens to render it.
+    without_number = re.sub(r"^\d+[.)]\s*", "", normalized).strip().lower()
+    if without_number in _KNOWN_SECTION_TITLES_NORMALIZED:
+        return True
+
+    # Fallback: generic "N. ALL CAPS TITLE" pattern, in case a template
+    # contains a stray heading for a section not in the known list above.
+    return bool(_STRAY_SECTION_HEADING_RE.match(normalized))
+
 
 def _set_paragraph_text_preserve_format(paragraph, new_text: str):
     if not paragraph.runs:
@@ -221,6 +291,19 @@ def _set_paragraph_text_preserve_format(paragraph, new_text: str):
     paragraph.runs[0].text = new_text
     for run in paragraph.runs[1:]:
         run.text = ""
+
+
+def _remove_paragraph(paragraph):
+    p = paragraph._p
+    parent = p.getparent()
+    if parent is not None:
+        parent.remove(p)
+
+
+def _remove_sdt(sdt_element):
+    parent = sdt_element.getparent()
+    if parent is not None:
+        parent.remove(sdt_element)
 
 
 def _sdt_placeholder_text(sdt_element) -> str:
@@ -283,7 +366,12 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         "completion_date", datetime.utcnow().strftime("%B %d, %Y")
     )
 
+    body_anchor = _find_body_placeholder(doc)
+
     for para in doc.paragraphs:
+        if body_anchor is not None and para._p is body_anchor._p:
+            break
+
         raw_text = para.text
         stripped = raw_text.strip()
         lowered = stripped.lower()
@@ -298,14 +386,21 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_paragraph_text_preserve_format(para, value)
+            else:
+                _remove_paragraph(para)
             continue
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
             _set_paragraph_text_preserve_format(
                 para, f"This statement of work completed on {completion_date}"
             )
+            continue
 
-    for sdt in doc.element.body.iter(qn("w:sdt")):
+        if _looks_like_stray_section_heading(stripped):
+            _remove_paragraph(para)
+            continue
+
+    for sdt in list(doc.element.body.iter(qn("w:sdt"))):
         raw_text = _sdt_placeholder_text(sdt)
         if not raw_text:
             continue
@@ -324,6 +419,8 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_sdt_text(sdt, value)
+            else:
+                _remove_sdt(sdt)
             continue
 
         if lowered in _LITERAL_PLACEHOLDER_LABELS:
@@ -331,18 +428,23 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             value = cover_fields.get(field_key, "")
             if value:
                 _set_sdt_text(sdt, value)
+            else:
+                _remove_sdt(sdt)
             continue
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
             _set_sdt_text(sdt, f"This statement of work completed on {completion_date}")
+            continue
 
+        if _looks_like_stray_section_heading(stripped):
+            _remove_sdt(sdt)
+            continue
 
 # ----------------------------
 # TEMPLATE LOADER
 # ----------------------------
 def load_template(template_path: str) -> Document:
     return Document(template_path)
-
 
 # ----------------------------
 # CONTENT INSERTION HELPERS
@@ -352,7 +454,6 @@ def _find_body_placeholder(doc: Document, placeholder: str = _SOW_BODY_PLACEHOLD
         if placeholder in (para.text or ""):
             return para
     return None
-
 
 def _clear_placeholder_paragraph(paragraph):
     if paragraph is None:
@@ -364,12 +465,10 @@ def _clear_placeholder_paragraph(paragraph):
     else:
         paragraph.text = ""
 
-
 def _insert_paragraph_after(anchor: Paragraph, text: str = "", style=None) -> Paragraph:
     new_p = anchor.insert_paragraph_before(text=text, style=style)
     anchor._p.addnext(new_p._p)
     return new_p
-
 
 def _add_inline_runs(paragraph, text: str):
     parts = re.split(r"(\*\*.*?\*\*|\*.*?\*)", text)
@@ -402,6 +501,48 @@ def _split_table_row(line: str) -> list[str]:
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
+# ----------------------------
+# TABLE STYLING (border/shading defined directly on the table, rather than
+# via a named style that may not exist in the destination template)
+# ----------------------------
+def _set_table_borders(table, color_hex: str = "999999", size: str = "4"):
+    tbl_pr = table._tbl.tblPr
+    borders = OxmlElement("w:tblBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        edge_el = OxmlElement(f"w:{edge}")
+        edge_el.set(qn("w:val"), "single")
+        edge_el.set(qn("w:sz"), size)
+        edge_el.set(qn("w:space"), "0")
+        edge_el.set(qn("w:color"), color_hex)
+        borders.append(edge_el)
+    tbl_pr.append(borders)
+
+
+def _set_table_full_width(table):
+    tbl_pr = table._tbl.tblPr
+    width_el = OxmlElement("w:tblW")
+    width_el.set(qn("w:type"), "pct")
+    width_el.set(qn("w:w"), "5000")  # 5000 = 100% in fiftieths-of-a-percent
+    tbl_pr.append(width_el)
+
+
+def _shade_cell(cell, fill_hex: str):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), fill_hex)
+    tc_pr.append(shd)
+
+
+def _mark_header_row_repeat(table):
+    tr = table.rows[0]._tr
+    tr_pr = tr.get_or_add_trPr()
+    header_el = OxmlElement("w:tblHeader")
+    header_el.set(qn("w:val"), "true")
+    tr_pr.append(header_el)
+
+
 def _insert_table_after(doc: Document, anchor: Paragraph, table_lines: list[str]) -> Paragraph:
     rows = [_split_table_row(line) for line in table_lines if _is_table_line(line)]
     if not rows:
@@ -416,11 +557,19 @@ def _insert_table_after(doc: Document, anchor: Paragraph, table_lines: list[str]
     except Exception:
         pass
 
+    # Belt-and-braces: guarantee visible borders and full-width layout
+    # regardless of whether "Table Grid" actually exists in this template.
+    _set_table_borders(table)
+    _set_table_full_width(table)
+
     for idx, value in enumerate(header):
-        cell_p = table.rows[0].cells[idx].paragraphs[0]
+        cell = table.rows[0].cells[idx]
+        cell_p = cell.paragraphs[0]
         _add_inline_runs(cell_p, value)
         for run in cell_p.runs:
             run.bold = True
+        _shade_cell(cell, "F2F2F2")
+    _mark_header_row_repeat(table)
 
     for row in body:
         cells = table.add_row().cells
@@ -519,6 +668,26 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
 
     return doc
 
+_GENERATED_HEADING_STYLE_NAMES = ("SOW Title", "SOW Heading 1")
+
+
+def _dedupe_stray_cover_headings(doc: Document):
+    paragraphs = doc.paragraphs
+
+    first_real_heading_idx = None
+    for idx, para in enumerate(paragraphs):
+        style_name = para.style.name if para.style is not None else None
+        if style_name in _GENERATED_HEADING_STYLE_NAMES:
+            first_real_heading_idx = idx
+            break
+
+    if first_real_heading_idx is None:
+        return
+
+    for para in paragraphs[:first_real_heading_idx]:
+        if _looks_like_stray_section_heading(para.text):
+            _remove_paragraph(para)
+
 
 # ----------------------------
 # MAIN EXPORT FUNCTION
@@ -530,6 +699,7 @@ def export_docx_from_template(template_path: str, sow_markdown: str,
     doc = load_template(template_path)
     apply_cover_page_fields(doc, cover_fields)
     doc = add_sow_content(doc, sow_markdown, for_pdf=for_pdf)
+    _dedupe_stray_cover_headings(doc)
 
     buffer = BytesIO()
     doc.save(buffer)

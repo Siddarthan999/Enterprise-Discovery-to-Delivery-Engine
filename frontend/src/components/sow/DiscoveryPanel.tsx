@@ -124,7 +124,7 @@ export default function DiscoveryPanel({
         <div>
           <h2 className="text-lg font-medium">Discovery Engine</h2>
           <p className="text-xs text-zinc-400">
-            Extract structured project state from transcript
+            Extract structured project state from client context
           </p>
         </div>
       </div>
