@@ -142,7 +142,7 @@ export default function TranscriptPanel({
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="Paste meeting transcript here..."
-            className="h-64 w-full rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-[#c90c61]/50"
+            className="dark-scrollbar h-64 w-full rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm text-white outline-none focus:border-[#c90c61]/50"
           />
 
           <div className="mt-3 flex items-center justify-between">

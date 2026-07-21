@@ -141,7 +141,7 @@ export default function ChatPage() {
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/80 p-5 shadow-2xl shadow-black/20 space-y-5">
+        <div className="dark-scrollbar flex-1 overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/80 p-5 shadow-2xl shadow-black/20 space-y-5">
           {messages.length === 0 && (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">

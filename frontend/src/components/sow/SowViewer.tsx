@@ -46,7 +46,7 @@ export default function SowViewer({ sow }: { sow: string }) {
 
       <div className="mt-4">
         {sow ? (
-          <div className="max-h-[32rem] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+          <div className="dark-scrollbar max-h-[32rem] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-5">
             <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-zinc-200">
               {sow}
             </pre>

@@ -1,11 +1,11 @@
 "use client";
 
-import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2 } from "lucide-react";
-import { addApprovalComment, approveSow, updateSowVersion } from "@/lib/api";
+import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare } from "lucide-react";
+import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle } from "@/lib/api";
 import CommentsPanel from "./CommentsPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type Props = {
   loading: boolean;
@@ -13,6 +13,10 @@ type Props = {
   sow: any;
   comments: any[];
   refresh: () => Promise<void>;
+  compareData: any;
+  compareFrom?: number | null;
+  compareTo?: number | null;
+  onClearCompare?: () => void;
 };
 
 function badge(status: string) {
@@ -28,11 +32,13 @@ function badge(status: string) {
   }
 }
 
-export default function SowApprovalViewer({loading, viewerRole, sow, comments, refresh,}: Props) {
+export default function SowApprovalViewer({loading, viewerRole, sow, comments, refresh, compareData, compareFrom, compareTo, onClearCompare}: Props) {
   const document = sow?.document;
   const version = sow?.version;
 
   const [editing, setEditing] = useState(false);
+  const [editingTitle,setEditingTitle]=useState(false);
+  const [title,setTitle]=useState("");
   const [markdown, setMarkdown] = useState(version?.markdown ?? "");
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -50,9 +56,50 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
 
   const [approving, setApproving] = useState(false);
 
+  const compareContainerRef = useRef<HTMLDivElement | null>(null);
+  const diffScopeRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     setMarkdown(version?.markdown ?? "");
   }, [version]);
+
+  useEffect(() => {
+    setTitle(document?.title ?? "");
+  }, [document]);
+
+  useEffect(() => {
+    if (!compareData) return;
+
+    const timer = setTimeout(() => {
+      compareContainerRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      const scope = diffScopeRef.current;
+      if (!scope) return;
+
+      const firstChange = scope.querySelector<HTMLElement>(
+        ".diff_add, .diff_chg, .diff_sub"
+      );
+
+      if (firstChange) {
+        setTimeout(() => {
+          firstChange.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+
+          firstChange.classList.add("diff-jump-highlight");
+          setTimeout(() => {
+            firstChange.classList.remove("diff-jump-highlight");
+          }, 2200);
+        }, 350);
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [compareData]);
 
   if (loading) {
     return (
@@ -150,145 +197,238 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
  }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
-      {/* HEADER */}
-      <div className="rounded-2xl border border-white/10 bg-zinc-900/70">
-        <div className="border-b border-white/10 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <FileText size={18} className="shrink-0 text-zinc-400" />
-                <h2 className="truncate text-lg font-semibold">
-                  {document.title}
-                </h2>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1.5 text-xs">
-                  <User size={13} />
-                  Version {document.current_version}
-                </span>
-                <span
-                  className={`rounded-lg border px-2.5 py-1.5 text-xs ${badge(
-                    document.status
-                  )}`}
-                >
-                  {document.status}
-                </span>
-                <span className="rounded-lg bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-300">
-                  {document.current_stage}
-                </span>
-              </div>
+      {/* COMPARE RESULT — full width, only appears when active, sits
+          above the document/comments row so it never pushes comments
+          out of reach */}
+      {compareData && (
+        <div
+          ref={compareContainerRef}
+          className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-zinc-900/70"
+        >
+          <div className="flex items-center justify-between border-b border-cyan-500/20 bg-cyan-500/5 px-5 py-3.5">
+            <div className="flex items-center gap-2 text-sm">
+              <GitCompare size={16} className="text-cyan-400" />
+              <span className="font-medium text-white">Comparing</span>
+              <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-zinc-300">
+                v{compareFrom}
+              </span>
+              <span className="text-zinc-600">→</span>
+              <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-zinc-300">
+                v{compareTo}
+              </span>
             </div>
-            <div className="shrink-0 text-right">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">
-                Viewing as
-              </p>
-              <p className="mt-0.5 text-sm font-medium">{viewerRole}</p>
-            </div>
+
+            {onClearCompare && (
+              <button
+                onClick={onClearCompare}
+                title="Close comparison"
+                className="rounded-md p-1.5 text-zinc-500 transition hover:bg-white/5 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 border-b border-white/10 px-5 py-2.5 text-xs text-zinc-500">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500/70" />
+              Added
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-amber-400/70" />
+              Changed
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-rose-500/70" />
+              Removed
+            </span>
+          </div>
+
+          <div
+            ref={diffScopeRef}
+            className="dark-scrollbarsow-diff-scope max-h-[420px] overflow-auto"
+          >
+            <div
+              dangerouslySetInnerHTML={{
+                __html: compareData.diff,
+              }}
+            />
           </div>
         </div>
+      )}
 
-        {/* MARKDOWN */}
-        <div className="relative max-h-[700px] overflow-y-auto border-b border-white/10">
-            <article className="prose prose-invert max-w-none p-8" onMouseUp={handleTextSelection}>
-                {editing ? (
-                    <textarea
-                        value={markdown}
-                        onChange={(e)=>setMarkdown(e.target.value)}
-                        className="h-[650px] w-full resize-none rounded-lg border border-white/10 bg-zinc-950 p-5 font-mono text-sm outline-none"
-                    />
+      {/* DOCUMENT + COMMENTS — two-column, both height-matched to the
+          viewport with independent scroll. Comments are ALWAYS visible
+          beside the document, never below a long scroll chain. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px] xl:items-start">
+
+        {/* Document column */}
+        <div className="flex max-h-[calc(100vh-160px)] flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/70">
+          <div className="shrink-0 border-b border-white/10 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <FileText size={17} className="shrink-0 text-zinc-400" />
+                  <div className="flex min-w-0 items-center gap-2">
+                    {editingTitle ? (
+                      <>
+                        <input
+                          value={title}
+                          onChange={(e)=>setTitle(e.target.value)}
+                          className="rounded border border-white/10 bg-zinc-950 px-2 py-1 text-sm"
+                        />
+                        <button onClick={async()=>{await updateSowTitle({sow_id:document.id,title});setEditingTitle(false);await refresh();}}>
+                          <Save size={16}/>
+                        </button>
+                        <button onClick={()=>{setTitle(document.title);setEditingTitle(false);}}>
+                          <X size={16}/>
+                        </button>
+                      </>
                     ) : (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {markdown}
-                    </ReactMarkdown>
-                )}
-            </article>
+                      <>
+                        <h2 className="truncate text-lg font-semibold">{document.title}</h2>
+                        <button onClick={()=>setEditingTitle(true)} className="shrink-0 text-zinc-500 hover:text-white">
+                          <Pencil size={13}/>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <span className="flex items-center gap-1 rounded-lg bg-white/5 px-2 py-1 text-[11px]">
+                    <User size={11} />
+                    v{document.current_version}
+                  </span>
+                  <span
+                    className={`rounded-lg border px-2 py-1 text-[11px] ${badge(
+                      document.status
+                    )}`}
+                  >
+                    {document.status}
+                  </span>
+                  <span className="rounded-lg bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-300">
+                    {document.current_stage}
+                  </span>
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+                  Viewing as
+                </p>
+                <p className="text-xs font-medium">{viewerRole}</p>
+              </div>
+            </div>
+          </div>
 
-            {popup.visible && (
-                <button
-                onClick={() => {
-                    setShowCommentDialog(true);
-                }}
-                title="Add comment on selection"
-                className="fixed z-50 rounded-full bg-[#c90c61] p-3 shadow-xl transition hover:scale-105"
-                style={{
-                    left: popup.x,
-                    top: popup.y,
-                }}
-                >
-                <MessageSquarePlus size={18} />
-                </button>
-            )}
+          {/* MARKDOWN — this is the part that scrolls internally */}
+          <div className="dark-scrollbar relative flex-1 overflow-y-auto">
+              <article className="prose prose-invert prose-sm max-w-none p-6" onMouseUp={handleTextSelection}>
+                  {editing ? (
+                      <textarea
+                          value={markdown}
+                          onChange={(e)=>setMarkdown(e.target.value)}
+                          className="h-[600px] w-full resize-none rounded-lg border border-white/10 bg-zinc-950 p-4 font-mono text-sm outline-none"
+                      />
+                      ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {markdown}
+                      </ReactMarkdown>
+                  )}
+              </article>
+
+              {popup.visible && (
+                  <button
+                  onClick={() => {
+                      setShowCommentDialog(true);
+                  }}
+                  title="Add comment on selection"
+                  className="fixed z-50 rounded-full bg-[#c90c61] p-3 shadow-xl transition hover:scale-105"
+                  style={{
+                      left: popup.x,
+                      top: popup.y,
+                  }}
+                  >
+                  <MessageSquarePlus size={18} />
+                  </button>
+              )}
+          </div>
+
+          {/* ACTION BAR — pinned at bottom of the document column */}
+          <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+              <Clock3 size={13} />
+              <span className="hidden sm:inline">
+                {canApprove
+                  ? "You are the active reviewer."
+                  : document.status === "Approved"
+                  ? "Fully approved."
+                  : `Waiting for ${document.current_stage}.`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {editing ? (
+                  <>
+                  <button
+                      onClick={() => setShowSaveDialog(true)}
+                      title="Save changes"
+                      className="rounded-lg bg-emerald-600 p-1.5 transition hover:bg-emerald-500"
+                  >
+                      <Save size={15} />
+                  </button>
+                  <button
+                      onClick={() => {
+                      setEditing(false);
+                      setMarkdown(version.markdown);
+                      }}
+                      title="Discard changes"
+                      className="rounded-lg bg-zinc-700 p-1.5 transition hover:bg-zinc-600"
+                  >
+                      <X size={15} />
+                  </button>
+                  </>
+              ) : (
+                  <button
+                  onClick={() => setEditing(true)}
+                  title="Edit document"
+                  className="rounded-lg bg-cyan-600 p-1.5 transition hover:bg-cyan-500"
+                  >
+                  <Pencil size={15} />
+                  </button>
+              )}
+
+              <button
+                  onClick={handleApprove}
+                  disabled={!canApprove || approving}
+                  title={canApprove ? "Approve this SOW" : "Not your turn to approve"}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium transition hover:bg-emerald-500 disabled:opacity-40"
+              >
+                  {approving ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Check size={13} />
+                  )}
+                  Approve
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* ACTION BAR */}
-        <div className="flex items-center justify-between px-5 py-3.5">
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <Clock3 size={15} />
-            {canApprove
-              ? "You are the active reviewer."
-              : document.status === "Approved"
-              ? "This SOW has been fully approved."
-              : `Waiting for ${document.current_stage} review.`}
-          </div>
-          <div className="flex items-center gap-2">
-            {editing ? (
-                <>
-                <button
-                    onClick={() => setShowSaveDialog(true)}
-                    title="Save changes"
-                    className="rounded-lg bg-emerald-600 p-2 transition hover:bg-emerald-500"
-                >
-                    <Save size={17} />
-                </button>
-                <button
-                    onClick={() => {
-                    setEditing(false);
-                    setMarkdown(version.markdown);
-                    }}
-                    title="Discard changes"
-                    className="rounded-lg bg-zinc-700 p-2 transition hover:bg-zinc-600"
-                >
-                    <X size={17} />
-                </button>
-                </>
-            ) : (
-                <button
-                onClick={() => setEditing(true)}
-                title="Edit document"
-                className="rounded-lg bg-cyan-600 p-2 transition hover:bg-cyan-500"
-                >
-                <Pencil size={17} />
-                </button>
-            )}
-
-            <button
-                onClick={handleApprove}
-                disabled={!canApprove || approving}
-                title={canApprove ? "Approve this SOW" : "Not your turn to approve"}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium transition hover:bg-emerald-500 disabled:opacity-40"
-            >
-                {approving ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Check size={15} />
-                )}
-                Approve
-            </button>
-          </div>
+        {/* Comments column — sticky, height-matched to document column,
+            scrolls independently. This is the actual fix: comments are
+            beside the document, always in view, never below the fold. */}
+        <div className="max-h-[calc(100vh-160px)] xl:sticky xl:top-6">
+          <CommentsPanel
+            sowId={document.id}
+            version={document.current_version}
+            viewerRole={viewerRole}
+            currentStage={document.current_stage}
+            comments={comments}
+            refresh={refresh}
+          />
         </div>
       </div>
-
-      {/* COMMENTS */}
-      <CommentsPanel
-        sowId={document.id}
-        version={document.current_version}
-        viewerRole={viewerRole}
-        currentStage={document.current_stage}
-        comments={comments}
-        refresh={refresh}
-      />
 
       {showCommentDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

@@ -4,6 +4,7 @@ import json
 from app.core.postgres import engine
 from pydantic import BaseModel
 from app.core.llm_router import generate_completion
+from difflib import HtmlDiff
 
 router = APIRouter(prefix="/approval", tags=["approval"])
 
@@ -44,6 +45,10 @@ class UpdateVersionRequest(BaseModel):
     sow_id:int
     markdown:str
     mode:str
+
+class UpdateTitleRequest(BaseModel):
+    sow_id: int
+    title: str
 
 def build_revision_prompt(markdown: str, comments: list[dict]):
 
@@ -570,3 +575,65 @@ def update_version(req: UpdateVersionRequest):
             })
 
     return {"success":True}
+
+@router.post("/update-title")
+def update_title(req: UpdateTitleRequest):
+
+    with engine.begin() as conn:
+
+        conn.execute(text("""
+            UPDATE sow_documents
+            SET
+                title=:title,
+                updated_at=NOW()
+            WHERE id=:id
+        """),{
+            "title":req.title,
+            "id":req.sow_id
+        })
+
+    return {"success":True}
+
+@router.get("/sows/{sow_id}/compare/{v1}/{v2}")
+def compare_versions(
+    sow_id: int,
+    v1: int,
+    v2: int,
+):
+    with engine.begin() as conn:
+
+        old = conn.execute(text("""
+            SELECT markdown
+            FROM sow_versions
+            WHERE sow_id = :sid
+            AND version = :v
+        """), {
+            "sid": sow_id,
+            "v": v1
+        }).scalar()
+
+        new = conn.execute(text("""
+            SELECT markdown
+            FROM sow_versions
+            WHERE sow_id = :sid
+            AND version = :v
+        """), {
+            "sid": sow_id,
+            "v": v2
+        }).scalar()
+
+    if old is None or new is None:
+        return {
+            "error": "One or both versions were not found."
+        }
+
+    diff = HtmlDiff().make_table(
+        old.splitlines(),
+        new.splitlines(),
+        fromdesc=f"Version {v1}",
+        todesc=f"Version {v2}"
+    )
+
+    return {
+        "diff": diff
+    }
