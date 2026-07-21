@@ -54,8 +54,17 @@ class WorkstreamRow(BaseModel):
 
 
 class ResourceRow(BaseModel):
-    """One row of the Customer Resources table."""
-    name: str = ""            # role name, e.g. "Executive Sponsor"
+    """One row of the Customer Resources table.
+
+    NOTE: `role` must always hold a generic role/title (e.g. "Executive
+    Sponsor"), never a person's name. The field used to be called `name`,
+    which was ambiguous enough that the model would sometimes fill it with
+    an actual attendee's name pulled from the transcript (e.g. "Michael
+    Chen") instead of the role that person occupies. Renaming it removes
+    that ambiguity at the schema level; see the explicit instruction in
+    build_structured_sow_prompt() as well.
+    """
+    role: str = ""
     description: str = ""
     allocation_per_week: str = ""  # keep as string: values like "0.25" or "2" or "as required"
 
@@ -64,8 +73,7 @@ class StructuredSOW(BaseModel):
     # --- Legal preamble ---
     provider_legal_name: str = "TBD"
     agreement_reference: str = (
-        "the Master Subscription Agreement, including the Professional Services Addendum "
-        "(the \u201cAgreement\u201d)"
+        "the Master Subscription Agreement, including the Professional Services Addendum"
     )
 
     # --- 1. Contact Information ---
@@ -300,10 +308,13 @@ def build_structured_sow_prompt(
     mandatory_list = "\n".join(f"- {s}" for s in MANDATORY_SOW_SECTIONS)
 
     return f"""
-You are drafting a Professional Services Statement of Work in the style of a concise,
-legally-framed SaaS vendor SOW (similar in tone and density to a Notion / enterprise SaaS
-Professional Services SOW) \u2014 NOT a long-form management-consulting SOW. Favor tight,
-contract-grade language over expansive narrative sections.
+You are drafting a Professional Services Statement of Work in the style of a
+legally-framed SaaS vendor SOW (similar in tone to a Notion / enterprise SaaS Professional
+Services SOW), written with contract-grade precision \u2014 but each section should be
+thorough and fully fleshed out, not a bare-bones skeleton. Write in complete sentences with
+concrete detail pulled from the extracted state and transcript; avoid one-line filler
+bullets. Where the input supports it, prefer 2\u20133 sentences of substantive detail per
+bullet/point over a short phrase, while never inventing specifics the input doesn't support.
 
 IMPORTANT:
 - Do NOT write markdown.
@@ -337,24 +348,42 @@ CONTENT QUALITY RULES:
   a migration or build, a workspace/governance workstream, a training/enablement workstream,
   and a handover/sustainment workstream) \u2014 mirror however many workstreams are actually
   supported by the extracted state; do not force a fixed count. Each workstream should have
-  a short title and 2\u20135 bullets of concrete activity, not generic filler.
+  a short title and 4\u20138 bullets of concrete activity \u2014 each bullet should describe
+  the activity, its purpose, and (where the input supports it) how it will be carried out,
+  not a generic one-line filler phrase.
 - Customer Obligations and Expectations MUST:
   - state any known scope boundaries (data volumes, system counts, environment counts) as
-    scope_summary_bullets where the input provides them,
+    scope_summary_bullets where the input provides them, elaborated with the concrete
+    numbers/context captured rather than a bare label,
   - list concrete obligations (access provisioning, credentials, stakeholder availability,
-    sign-off ownership, review of migration/config proposals) as obligation_bullets,
+    sign-off ownership, review of migration/config proposals) as obligation_bullets, with
+    enough detail that a customer reading it knows exactly what is expected of them and by
+    when, where the input supports that level of detail,
   - populate customer_resources with role-based staffing expectations (e.g. Executive
     Sponsor, Project Manager, IT/Dev resource, Subject Matter Experts, Change &
-    Communications Lead) with a short description and an estimated weekly allocation
-    (e.g. "0.25", "2", "as required") only where the input supports an estimate \u2014
-    otherwise use "TBD".
-- Out-of-Scope & Change Orders MUST be a short paragraph stating that work outside this SOW
-  requires a signed Change Order, consistent with any out-of-scope items captured in state.
+    Communications Lead). For each row: `role` MUST always be the generic role/title \u2014
+    NEVER a specific person's name, even if the transcript names an individual for that
+    role. If the transcript or state ties a named individual to a role, that person's name
+    may be woven into the `description` (e.g. "Primary escalation point; currently
+    [Name]."), but the `role` field itself must stay a title such as "Executive Sponsor" or
+    "IT/Dev Resource". Give each row a substantive one-to-two sentence description of what
+    the role is responsible for, and an estimated weekly allocation (e.g. "0.25", "2", "as
+    required") only where the input supports an estimate \u2014 otherwise use "TBD".
+- Out-of-Scope & Change Orders MUST be a fully developed paragraph (4\u20136 sentences)
+  stating that work outside this SOW requires a signed Change Order, and explicitly
+  enumerating whatever out-of-scope items were captured in state so the boundary is
+  unambiguous, not just a boilerplate one-liner.
 - Schedule and Fees MUST state duration, fee_amount, start_date, end_date, and
   payment_terms using only values present in the extracted state \u2014 use "TBD" for any
   that are missing. Do NOT invent a dollar amount or date.
 - Expenses and Invoices MAY use standard boilerplate language unless the extracted state
   specifies different terms.
+
+- agreement_reference should name the governing agreement only (e.g. "the Master
+  Subscription Agreement, including the Professional Services Addendum"). Do NOT append
+  "(the \u201cAgreement\u201d)" yourself \u2014 the template already adds that defined-term
+  suffix once, and duplicating it here will produce "(the \u201cAgreement\u201d) (the
+  \u201cAgreement\u201d)" in the final document.
 
 PLACEHOLDER & SAFETY RULES:
 - If commercial/legal/admin data is missing, use "TBD" rather than omitting fields.
@@ -365,7 +394,7 @@ PLACEHOLDER & SAFETY RULES:
 Return ONLY valid JSON with this structure:
 {{
   "provider_legal_name": "TBD",
-  "agreement_reference": "the Master Subscription Agreement, including the Professional Services Addendum (the \\"Agreement\\")",
+  "agreement_reference": "the Master Subscription Agreement, including the Professional Services Addendum",
   "customer_legal_name": "TBD",
   "customer_contact_name": "TBD",
   "customer_contact_title": "TBD",
@@ -377,7 +406,7 @@ Return ONLY valid JSON with this structure:
   "scope_summary_bullets": [""],
   "obligation_bullets": [""],
   "customer_resources": [
-    {{"name": "", "description": "", "allocation_per_week": "TBD"}}
+    {{"role": "", "description": "", "allocation_per_week": "TBD"}}
   ],
   "out_of_scope_change_control": "",
   "duration": "TBD",
@@ -457,18 +486,18 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
         "terms of this SOW, the Agreement, or any order form for the Services, the terms of "
         "this SOW will control.",
         "",
-        # Fix: prefixed with "## " so template_engine.add_sow_content() routes
-        # this line through the styles["h1"] heading branch instead of the
-        # numbered-list branch (re.match(r"^\d+\.\s+", line)). Without the
-        # "## " marker these rendered as plain list items with no bold and no
-        # heading-level spacing.
+        # "## " prefix routes this through the styles["h1"] heading branch in
+        # template_engine.add_sow_content() instead of the numbered-list
+        # branch (re.match(r"^\d+\.\s+", line)).
         "## 1. CONTACT INFORMATION",
         "",
-        f"Customer Legal Name: {_fmt_optional(sow.customer_legal_name)}",
-        f"Name: {_fmt_optional(sow.customer_contact_name)}",
-        f"Title: {_fmt_optional(sow.customer_contact_title)}",
-        f"Address: {_fmt_optional(sow.customer_address)}",
-        f"Email: {_fmt_optional(sow.customer_contact_email)}",
+        # Bold field labels ("**Label:** value") so the contact block reads
+        # as a scannable form rather than a wall of plain text.
+        f"**Customer Legal Name:** {_fmt_optional(sow.customer_legal_name)}",
+        f"**Name:** {_fmt_optional(sow.customer_contact_name)}",
+        f"**Title:** {_fmt_optional(sow.customer_contact_title)}",
+        f"**Address:** {_fmt_optional(sow.customer_address)}",
+        f"**Email:** {_fmt_optional(sow.customer_contact_email)}",
         "",
         "## 2. ENGAGEMENT OBJECTIVES & SCOPE",
         "",
@@ -476,7 +505,13 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
 
     if sow.workstreams:
         for ws in sow.workstreams:
-            lines.append(f"**{_fmt_optional(ws.title, 'Workstream')}**")
+            # "### " routes this through styles["h2"] in template_engine, so
+            # each workstream reads as a real sub-heading (distinct size +
+            # spacing) instead of bold text sitting flush against its own
+            # bullet list -- which is what made workstreams blend together
+            # visually in the rendered document.
+            lines.append(f"### {_fmt_optional(ws.title, 'Workstream')}")
+            lines.append("")
             if ws.bullets:
                 for b in ws.bullets:
                     lines.append(f"{BULLET} {b}")
@@ -508,15 +543,18 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "final execution copy of this SOW."
         )
 
-    lines.extend(["", "Customer Resources /", ""])
+    # "### " promotes this to a genuine sub-heading (styles["h2"]) instead of
+    # a plain body line, and drops the stray trailing "/" left over from the
+    # source PDF's two-column heading wrap.
+    lines.extend(["", "### Customer Resources", ""])
     if sow.customer_resources:
-        lines.append("| Name* | Description | Allocation per week |")
+        lines.append("| Role* | Description | Allocation per week |")
         lines.append("|---|---|---|")
         for row in sow.customer_resources:
-            name = _fmt_optional(row.name, "TBD")
+            role = _fmt_optional(row.role, "TBD")
             desc = _fmt_optional(row.description, "TBD")
             alloc = _fmt_optional(row.allocation_per_week, "TBD")
-            lines.append(f"| {name} | {desc} | {alloc} |")
+            lines.append(f"| {role} | {desc} | {alloc} |")
         lines.append("")
         lines.append("*Roles do not need to be mutually exclusive")
     else:
@@ -538,10 +576,10 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "bid on a fixed fee basis set forth below with the estimated duration post "
             "kick-off and engagement planning.",
             "",
-            "SUMMARY OF SCOPE OF SERVICES",
+            "### SUMMARY OF SCOPE OF SERVICES",
             "",
-            f"Duration: {_fmt_optional(sow.duration)}",
-            f"Cost: {_fmt_cost(sow.fee_amount)}",
+            f"**Duration:** {_fmt_optional(sow.duration)}",
+            f"**Cost:** {_fmt_cost(sow.fee_amount)}",
             "",
             f"This engagement will commence with a scheduled start date of "
             f"{_fmt_optional(sow.start_date)}. The scheduled end date of this SOW is "
@@ -559,16 +597,16 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "",
             sow.invoicing_terms,
             "",
-            "IN WITNESS WHEREOF, the parties have executed this SOW as of the Effective Date",
+            "### IN WITNESS WHEREOF, the parties have executed this SOW as of the Effective Date",
             "",
-            f"{_fmt_optional(sow.provider_legal_name)}",
-            f"Name: {_fmt_optional(sow.provider_signee_name)}",
-            f"Title: {_fmt_optional(sow.provider_signee_title)}",
+            f"**{_fmt_optional(sow.provider_legal_name)}**",
+            f"**Name:** {_fmt_optional(sow.provider_signee_name)}",
+            f"**Title:** {_fmt_optional(sow.provider_signee_title)}",
             "Date Signed:",
             "",
-            f"{_fmt_optional(sow.customer_legal_name)}",
-            f"Name: {_fmt_optional(sow.customer_signee_name)}",
-            f"Title: {_fmt_optional(sow.customer_signee_title)}",
+            f"**{_fmt_optional(sow.customer_legal_name)}**",
+            f"**Name:** {_fmt_optional(sow.customer_signee_name)}",
+            f"**Title:** {_fmt_optional(sow.customer_signee_title)}",
             "Date Signed:",
         ]
     )
