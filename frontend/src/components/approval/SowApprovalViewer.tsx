@@ -1,7 +1,7 @@
 "use client";
 
-import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare } from "lucide-react";
-import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle } from "@/lib/api";
+import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare, Download, FileType, FileCode, ChevronDown } from "lucide-react";
+import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle, getTemplates, exportSow } from "@/lib/api";
 import CommentsPanel from "./CommentsPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,6 +18,12 @@ type Props = {
   compareTo?: number | null;
   onClearCompare?: () => void;
 };
+
+const EXPORT_FORMATS = [
+  { id: "md", label: "Markdown", icon: FileCode },
+  { id: "docx", label: "DOCX", icon: FileType },
+  { id: "pdf", label: "PDF", icon: FileText },
+];
 
 function badge(status: string) {
   switch (status) {
@@ -59,6 +65,13 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const compareContainerRef = useRef<HTMLDivElement | null>(null);
   const diffScopeRef = useRef<HTMLDivElement | null>(null);
 
+  // --- Export state ---
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [exportTemplateId, setExportTemplateId] = useState<string>("");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     setMarkdown(version?.markdown ?? "");
   }, [version]);
@@ -66,6 +79,42 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   useEffect(() => {
     setTitle(document?.title ?? "");
   }, [document]);
+
+  useEffect(() => {
+    async function loadTemplates() {
+      try {
+        const data = await getTemplates();
+        setTemplates(data);
+
+        // Default to the template used during SOW generation (matched by name)
+        if (data.length > 0 && document?.template_reference) {
+          const matchedTemplate = data.find(
+            (t: any) => t.name === document.template_reference
+          );
+          setExportTemplateId(matchedTemplate?.id || data[0].id);
+        } else if (data.length > 0) {
+          setExportTemplateId(data[0].id);
+        }
+      } catch {
+        // Template list is optional for export
+      }
+    }
+    loadTemplates();
+  }, [document?.template_reference]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(e.target as Node)
+      ) {
+        setExportMenuOpen(false);
+      }
+    }
+    window.document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      window.document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (!compareData) return;
@@ -137,34 +186,34 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
     }
   }
 
-    function handleTextSelection() {
-        const sel = window.getSelection();
+  function handleTextSelection() {
+    const sel = window.getSelection();
 
-        if (!sel || sel.toString().trim() === "") {
-            setPopup({
-            visible: false,
-            x: 0,
-            y: 0,
-            });
-            return;
-        }
-
-        const range = sel.getRangeAt(0);
-
-        const rect = range.getBoundingClientRect();
-
-        setSelection(sel.toString());
-
-        setSelectionRange({
-            start: sel.anchorOffset,
-            end: sel.focusOffset,
-        });
-
+    if (!sel || sel.toString().trim() === "") {
         setPopup({
-            visible: true,
-            x: rect.right + 8,
-            y: rect.bottom + 8,
+        visible: false,
+        x: 0,
+        y: 0,
         });
+        return;
+    }
+
+    const range = sel.getRangeAt(0);
+
+    const rect = range.getBoundingClientRect();
+
+    setSelection(sel.toString());
+
+    setSelectionRange({
+        start: sel.anchorOffset,
+        end: sel.focusOffset,
+    });
+
+    setPopup({
+        visible: true,
+        x: rect.right + 8,
+        y: rect.bottom + 8,
+    });
   }
 
   async function handleSaveHighlightedComment() {
@@ -195,6 +244,32 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
       setPostingComment(false);
     }
  }
+
+ async function handleExport(format: string) {
+    setExporting(true);
+
+    try {
+      const res = await exportSow(
+        markdown,
+        format,
+        exportTemplateId || undefined,
+        null,
+        null
+      );
+      const blob = res.data;
+      const url = window.URL.createObjectURL(blob);
+
+      const a = window.document.createElement("a");
+      a.href = url;
+      a.download = `${document.title || "sow"}-v${version.version}.${format}`;
+      a.click();
+
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+      setExportMenuOpen(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -248,7 +323,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
 
           <div
             ref={diffScopeRef}
-            className="dark-scrollbarsow-diff-scope max-h-[420px] overflow-auto"
+            className="dark-scrollbar sow-diff-scope max-h-[420px] overflow-auto"
           >
             <div
               dangerouslySetInnerHTML={{
@@ -367,7 +442,64 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
                   : `Waiting for ${document.current_stage}.`}
               </span>
             </div>
+
             <div className="flex items-center gap-2">
+
+              {/* EXPORT */}
+              <div className="relative" ref={exportMenuRef}>
+                <button
+                  onClick={() => setExportMenuOpen((v) => !v)}
+                  title={`Export Version ${version.version}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-700 px-2.5 py-1.5 text-xs font-medium transition hover:bg-zinc-600"
+                >
+                  {exporting ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Download size={15} />
+                  )}
+                  <ChevronDown size={11} />
+                </button>
+
+                {exportMenuOpen && (
+                  <div className="absolute bottom-full right-0 z-50 mb-2 w-64 rounded-xl border border-white/10 bg-zinc-900 p-3 shadow-2xl">
+                    <p className="px-1 pb-2 text-[11px] uppercase tracking-wide text-zinc-500">
+                      Export Version {version.version}
+                    </p>
+
+                    {templates.length > 0 && (
+                      <select
+                        value={exportTemplateId}
+                        onChange={(e) => setExportTemplateId(e.target.value)}
+                        className="mb-2 w-full rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none"
+                      >
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <div className="flex flex-col gap-1">
+                      {EXPORT_FORMATS.map((f) => {
+                        const Icon = f.icon;
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => handleExport(f.id)}
+                            disabled={exporting}
+                            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
+                          >
+                            <Icon size={14} />
+                            {f.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {editing ? (
                   <>
                   <button

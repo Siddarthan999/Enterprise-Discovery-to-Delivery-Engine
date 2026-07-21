@@ -34,20 +34,7 @@ export const exportSow = (
   template_id?: string,
   state?: any,
   transcript?: string
-) =>
-  API.post(
-    "/sow/export",
-    {
-      sow,
-      format,
-      template_id,
-      state,
-      transcript,
-    },
-    {
-      responseType: "blob",
-    }
-  );
+) => API.post( "/sow/export", { sow, format, template_id, state, transcript,},{ responseType: "blob",} );
 
 //
 // Template APIs
