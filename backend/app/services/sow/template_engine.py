@@ -703,6 +703,46 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
     return doc
 
 
+# Style names that add_sow_content() actually uses for generated section
+# headings (see _build_sow_styles). Used by the final safety-net cleanup
+# below to find where the *real* body content starts.
+_GENERATED_HEADING_STYLE_NAMES = ("SOW Title", "SOW Heading 1")
+
+
+def _dedupe_stray_cover_headings(doc: Document):
+    """Final safety net, run at the very end of export_docx_from_template,
+    after the real SOW body has already been merged in.
+
+    apply_cover_page_fields() is supposed to strip any pre-existing/stray
+    section-heading text baked into a template's cover page (e.g. a
+    hardcoded "1. CONTACT INFORMATION" placed above the real content by
+    whoever authored the .docx template) *before* the real body content is
+    inserted. This function is a second, independent pass that catches the
+    same problem afterwards instead of beforehand -- so a duplicate heading
+    still gets removed even if apply_cover_page_fields was skipped, failed
+    silently, or ran against a different document than the one actually
+    rendered, for any reason.
+
+    It only ever removes paragraphs that sit BEFORE the first real
+    generated heading, so it can never touch legitimate body content.
+    """
+    paragraphs = doc.paragraphs
+
+    first_real_heading_idx = None
+    for idx, para in enumerate(paragraphs):
+        style_name = para.style.name if para.style is not None else None
+        if style_name in _GENERATED_HEADING_STYLE_NAMES:
+            first_real_heading_idx = idx
+            break
+
+    if first_real_heading_idx is None:
+        return
+
+    for para in paragraphs[:first_real_heading_idx]:
+        if _looks_like_stray_section_heading(para.text):
+            _remove_paragraph(para)
+
+
 # ----------------------------
 # MAIN EXPORT FUNCTION
 # ----------------------------
@@ -713,6 +753,7 @@ def export_docx_from_template(template_path: str, sow_markdown: str,
     doc = load_template(template_path)
     apply_cover_page_fields(doc, cover_fields)
     doc = add_sow_content(doc, sow_markdown, for_pdf=for_pdf)
+    _dedupe_stray_cover_headings(doc)
 
     buffer = BytesIO()
     doc.save(buffer)
