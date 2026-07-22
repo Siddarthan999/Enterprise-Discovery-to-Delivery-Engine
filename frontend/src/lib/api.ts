@@ -34,20 +34,7 @@ export const exportSow = (
   template_id?: string,
   state?: any,
   transcript?: string
-) =>
-  API.post(
-    "/sow/export",
-    {
-      sow,
-      format,
-      template_id,
-      state,
-      transcript,
-    },
-    {
-      responseType: "blob",
-    }
-  );
+) => API.post( "/sow/export", { sow, format, template_id, state, transcript,},{ responseType: "blob",} );
 
 //
 // Template APIs
@@ -148,3 +135,89 @@ export const searchDocuments = (
   }).then((res) => res.data);
 
 export default API;
+
+//
+// Authors APIs
+//
+export async function getAuthors() {
+  const res = await fetch(`${API_BASE}/authors`);
+
+  if (!res.ok) {
+    throw new Error("Failed to load authors");
+  }
+
+  return res.json();
+}
+
+export async function addAuthor(name: string) {
+  const res = await fetch(`${API_BASE}/authors`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to add author");
+  }
+
+  return res.json();
+}
+
+export async function deleteAuthor(id: number) {
+  const res = await fetch(`${API_BASE}/authors/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to delete author");
+  }
+
+  return res.json();
+}
+
+//
+// Approval APIs
+//
+export const getApprovalSows = () =>
+  API.get("/approval/sows").then((res) => res.data);
+
+export const getApprovalSow = (id: number) =>
+  API.get(`/approval/sows/${id}`).then((res) => res.data);
+
+export const getApprovalComments = (id: number) =>
+  API.get(`/approval/sows/${id}/comments`).then((res) => res.data);
+
+export const addApprovalComment = (payload: any) =>
+  API.post("/approval/comment", payload).then((res) => res.data);
+
+export const approveSow = (payload: any) =>
+  API.post("/approval/approve", payload).then((res) => res.data);
+
+export const requestChanges=(payload:any)=>
+  API.post("/approval/request-changes", payload).then(res=>res.data);
+
+export const getVersions = (id:number)=>
+    API.get(`/approval/sows/${id}/versions`).then(res=>res.data);
+
+export const getVersion = (id:number, version:number)=>
+    API.get(`/approval/sows/${id}/version/${version}`).then(res=>res.data);
+
+export const deleteSow = (id: number) =>
+  API.delete(`/approval/sows/${id}`).then((res) => res.data);
+
+export const deleteVersion = (sowId: number, version: number) =>
+  API.delete(`/approval/sows/${sowId}/version/${version}`).then((res) => res.data);
+
+export const deleteComment = (id:number, reviewerRole:string)=>
+  API.delete(`/approval/comment/${id}`,{ params:{ reviewer_role:reviewerRole }}).then(res=>res.data);
+
+export const updateSowVersion = (payload: any) =>
+  API.post("/approval/update-version", payload).then(res => res.data);
+
+export const updateSowTitle = (payload: any) =>
+  API.post("/approval/update-title", payload).then(res => res.data);
+
+export const compareVersions = (sowId: number, v1: number, v2: number) =>
+  API.get(`/approval/sows/${sowId}/compare/${v1}/${v2}`).then(res => res.data);

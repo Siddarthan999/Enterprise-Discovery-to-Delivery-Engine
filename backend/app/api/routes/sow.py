@@ -13,6 +13,7 @@ from app.services.sow_history.sow_history_search import (
 )
 from app.services.sow_agents.sow_review_orchestrator import review_sow_draft
 from app.services.sow_agents.sow_confidence import compute_sow_confidence
+from app.services.sow.save_sow import save_generated_sow
 
 router = APIRouter()
 
@@ -35,38 +36,49 @@ MANDATORY_SOW_SECTIONS = [
 # contract's bullet character rather than a markdown "-".
 BULLET = "\u25cf"  # ●
 
-
 class SOWRequest(BaseModel):
     state: dict | None = None
     template_id: str | None = None
     transcript: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Row models matching the new structure
-# ---------------------------------------------------------------------------
+    author_id: int | None = None
 
 class WorkstreamRow(BaseModel):
-    """One named workstream under Engagement Objectives & Scope,
-    e.g. 'Discovery and Alignment' -> its bullet points."""
     title: str = ""
     bullets: list[str] = Field(default_factory=list)
 
 
 class ResourceRow(BaseModel):
-    """One row of the Customer Resources table.
-
-    NOTE: `role` must always hold a generic role/title (e.g. "Executive
-    Sponsor"), never a person's name. The field used to be called `name`,
-    which was ambiguous enough that the model would sometimes fill it with
-    an actual attendee's name pulled from the transcript (e.g. "Michael
-    Chen") instead of the role that person occupies. Renaming it removes
-    that ambiguity at the schema level; see the explicit instruction in
-    build_structured_sow_prompt() as well.
-    """
     role: str = ""
     description: str = ""
     allocation_per_week: str = ""  # keep as string: values like "0.25" or "2" or "as required"
+
+
+class ContactRow(BaseModel):
+    role: str = ""
+    description: str = ""
+
+
+class DeliverableRow(BaseModel):
+    identifier: str = ""
+    description: str = ""
+    due_timing: str = ""
+
+
+class MeetingRow(BaseModel):
+    meeting_type: str = ""
+    frequency: str = ""
+    attendees: str = ""
+
+
+class RiskRow(BaseModel):
+    risk: str = ""
+    business_impact: str = ""
+    mitigation_action: str = ""
+
+
+class ApprovalRow(BaseModel):
+    role: str = ""
+    name: str = ""
 
 
 class StructuredSOW(BaseModel):
@@ -153,7 +165,6 @@ def _string_or_empty(value) -> str:
 def _list_or_empty(value) -> list:
     return value if isinstance(value, list) else []
 
-
 def _strip_markdown_artifacts(text_value: str) -> str:
     """Defensive guard: strip any stray markdown headings the LLM may add
     despite instructions not to, so free-text fields can't inject duplicate
@@ -162,7 +173,6 @@ def _strip_markdown_artifacts(text_value: str) -> str:
         return text_value
     text_value = re.sub(r"^#{1,6}\s*.*$", "", text_value, flags=re.MULTILINE)
     return text_value.strip()
-
 
 def format_state_for_prompt(state: dict) -> str:
     def _list_block(label: str, items: list):
@@ -177,6 +187,14 @@ def format_state_for_prompt(state: dict) -> str:
         ("PROJECT NAME", state.get("project_name")),
         ("CLIENT NAME", state.get("client_name")),
         ("PROVIDER NAME", state.get("provider_name")),
+        ("PROVIDER ADDRESS", state.get("provider_address")),
+        ("CLIENT EMAIL", state.get("client_email")),
+        ("PROVIDER EMAIL", state.get("provider_email")),
+        ("CLIENT PHONE", state.get("client_phone")),
+        ("PROVIDER PHONE", state.get("provider_phone")),
+        ("EFFECTIVE DATE", state.get("effective_date")),
+        ("PROJECT START", state.get("project_start")),
+        ("PROJECT END", state.get("project_end")),
         ("INDUSTRY", state.get("industry")),
         ("ENGAGEMENT TYPE", state.get("engagement_type")),
         ("MSA REFERENCE", state.get("msa_reference")),
@@ -264,10 +282,16 @@ def format_historical_context(historical_sows: list, historical_risks: list) -> 
         excerpts = []
         for sow in historical_sows:
             title = sow.get("title", "Unknown")
-            content = (sow.get("content") or "")[:800]
+            # Trimmed from 800 -> 500 chars: enough to convey structure/tone,
+            # less real estate for the model to lift specific entity facts
+            # (names, addresses, emails) out of.
+            content = (sow.get("content") or "")[:500]
             excerpts.append(f"[{title}]\n{content}")
         parts.append(
-            "PAST SOW EXCERPTS (use these for structure, tone, and how this organization frames commitments; do not copy text verbatim):\n"
+            "REFERENCE-ONLY PAST SOW EXCERPTS FROM A DIFFERENT, UNRELATED CLIENT.\n"
+            "Use ONLY for structure, tone, and how this organization frames commitments.\n"
+            "These excerpts belong to a DIFFERENT client engagement than the one you are "
+            "drafting right now.\n"
             + "\n\n".join(excerpts)
         )
 
@@ -333,16 +357,50 @@ TEMPLATE ID:
 MANDATORY SOW SECTIONS:
 {mandatory_list}
 
-EXTRACTED PROJECT STATE:
+EXTRACTED PROJECT STATE
+
+This is the primary structured representation of the engagement.
+
+If a required detail is missing from the extracted state but is explicitly present in the ORIGINAL DISCOVERY TRANSCRIPT or any uploaded supporting document, you MAY use that value.
+
+Never invent information.
+
+Never copy identifying information from historical SOWs.
+
+If a value cannot be found anywhere in the uploaded client context, use "TBD".
 {state_text}{transcript_block}
 
-HISTORICAL CONTEXT:
+===== HISTORICAL CONTEXT (REFERENCE MATERIAL ONLY \u2014 A DIFFERENT CLIENT) =====
 {historical_context}
+===== END HISTORICAL CONTEXT =====
+
+CRITICAL ANTI-CONTAMINATION RULE (read carefully \u2014 this has failed before):
+The HISTORICAL CONTEXT section above belongs to a DIFFERENT, UNRELATED client engagement.
+It exists ONLY to show you how this organization typically structures a SOW, what tone it
+uses, and what kinds of risks/mitigations have come up before. It is NOT part of the
+engagement you are drafting right now.
+- You MUST NOT copy, reuse, adapt, or reference ANY identifying detail from the
+  HISTORICAL CONTEXT \u2014 this includes but is not limited to: client/company names,
+  contact names, job titles, physical addresses, email addresses, phone numbers, dollar
+  amounts, specific dates, or contract reference numbers.
+- Every identifying detail you output (customer_legal_name, customer_contact_name,
+  customer_contact_title, customer_address, customer_contact_email, provider_legal_name,
+  signee names/titles, fee_amount, start_date, end_date, duration) MUST come EXCLUSIVELY
+  from the EXTRACTED PROJECT STATE or ORIGINAL DISCOVERY TRANSCRIPT above.
+- If the EXTRACTED PROJECT STATE / TRANSCRIPT does not contain a piece of identifying
+  information, the correct answer is "TBD" \u2014 NEVER borrow that detail from the
+  HISTORICAL CONTEXT to fill the gap, even if it would make the document look more
+  complete. A "TBD" placeholder is always correct; a name copied from a different client's
+  SOW is always wrong.
+
+HISTORICAL CONTEXT MISUSE HAS OCCURRED BEFORE: the client name from a past, unrelated SOW
+was previously copied into a newly generated SOW. Do not repeat this mistake.
 
 CONTENT QUALITY RULES:
 - Contact Information MUST reflect the actual customer legal entity name, primary contact
   name, title, address, and email as captured in the extracted state or transcript. If any
-  of these were not captured, use "TBD" \u2014 do not fabricate a name, title, or address.
+  of these were not captured, use "TBD" \u2014 do not fabricate a name, title, or address,
+  and do not source one from the HISTORICAL CONTEXT.
 - Engagement Objectives & Scope MUST be organized into a small number of named workstreams
   (e.g. "Discovery and Alignment", a workstream for the core technical deliverable such as
   a migration or build, a workspace/governance workstream, a training/enablement workstream,
@@ -424,6 +482,65 @@ Return ONLY valid JSON with this structure:
 """
 
 
+def _build_grounding_text(state: dict, transcript: str | None) -> str:
+    """The full set of text the model was legitimately allowed to draw
+    identifying facts from. Anything NOT found in here is untrustworthy
+    for an identity field, since the only other source in the prompt was
+    the historical-context excerpts (a different client)."""
+    parts = [format_state_for_prompt(state)]
+    if transcript:
+        parts.append(transcript)
+    return "\n".join(parts).lower()
+
+
+def _is_grounded(value: str, grounding_text: str) -> bool:
+    value = (value or "").strip()
+    if not value or value.upper() == "TBD":
+        # Nothing to validate — TBD/empty is always considered safe.
+        return True
+    return value.lower() in grounding_text
+
+
+# Fields where a leaked value from historical context would be actively
+# harmful (wrong client name on a real contract) rather than just
+# cosmetic — these are cross-checked against the real input after
+# generation, regardless of what the prompt instructed.
+_IDENTITY_FIELDS = [
+    "customer_legal_name",
+    "customer_contact_name",
+    "customer_contact_title",
+    "customer_address",
+    "customer_contact_email",
+    "provider_legal_name",
+    "provider_signee_name",
+    "provider_signee_title",
+    "customer_signee_name",
+    "customer_signee_title",
+]
+
+
+def _sanitize_identity_fields(sow: "StructuredSOW", state: dict, transcript: str | None) -> "StructuredSOW":
+    """Belt-and-braces guard against historical-context leakage: prompt
+    instructions alone aren't 100% reliable, so every identity-sensitive
+    field is cross-checked against the actual grounding text (extracted
+    state + transcript). If a value doesn't appear anywhere in the real
+    input, it almost certainly came from a historical SOW excerpt instead
+    — in which case it's reset to "TBD" rather than shipped as-is."""
+    grounding_text = _build_grounding_text(state, transcript)
+
+    for field in _IDENTITY_FIELDS:
+        value = getattr(sow, field, "")
+        if not _is_grounded(value, grounding_text):
+            print(
+                f"⚠️ Discarding ungrounded value for '{field}': {value!r} "
+                f"— not found in extracted state/transcript, likely leaked "
+                f"from historical SOW context. Resetting to 'TBD'."
+            )
+            setattr(sow, field, "TBD")
+
+    return sow
+
+
 def generate_structured_sow(
     project_name: str,
     state: dict,
@@ -454,14 +571,16 @@ def generate_structured_sow(
         ws.title = _strip_markdown_artifacts(ws.title)
         ws.bullets = [_strip_markdown_artifacts(b) for b in ws.bullets]
 
-    return sow
+    # Second defensive pass: verify every identity-sensitive field actually
+    # traces back to the real input, not a leaked historical-SOW fact.
+    sow = _sanitize_identity_fields(sow, state, transcript)
 
+    return sow
 
 def _fmt_optional(value: str, fallback: str = "TBD") -> str:
     """Render a value, or a clean fallback if empty \u2014 never a bare '()' or similar."""
     value = (value or "").strip()
     return value if value else fallback
-
 
 def _fmt_cost(value: str, fallback: str = "TBD") -> str:
     """Render a fee amount with a single 'USD ' prefix, without double-prefixing
@@ -472,7 +591,6 @@ def _fmt_cost(value: str, fallback: str = "TBD") -> str:
     if value.upper().startswith("USD"):
         return value
     return f"USD {value}"
-
 
 def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
     lines = [
@@ -666,19 +784,44 @@ def generate_sow(payload: SOWRequest):
         draft_markdown=review_markdown,
     )
 
+    historical_sows_used = [
+        {
+            "doc_id": s.get("doc_id"),
+            "title": s.get("title"),
+            "score": s.get("score"),
+        }
+        for s in historical_sows
+    ]
+
+    # Persist the generated SOW as version 1, tied to whichever author was
+    # selected in the UI, along with the reviewer agent output and
+    # confidence score for THIS version — so scrolling back through
+    # history later still shows what the reviewers said at the time.
+    sow_id = None
+    version_id = None
+    try:
+        save_result = save_generated_sow(
+            title=project_name,
+            markdown=review_markdown,
+            author_id=payload.author_id,
+            review=review,
+            confidence=confidence,
+            historical_sows_used=historical_sows_used,
+            historical_risks_considered=historical_risks,
+        )
+        sow_id = save_result["sow_id"]
+        version_id = save_result["version_id"]
+    except Exception as e:
+        print(f"⚠️ Failed to save generated SOW to database: {e}")
+
     return {
+        "sow_id": sow_id,
+        "version_id": version_id,
         "project_name": project_name,
         "template_id": payload.template_id,
         "structured_sow": structured_sow.model_dump(),
         "sow": review_markdown,
-        "historical_sows_used": [
-            {
-                "doc_id": s.get("doc_id"),
-                "title": s.get("title"),
-                "score": s.get("score"),
-            }
-            for s in historical_sows
-        ],
+        "historical_sows_used": historical_sows_used,
         "historical_risks_considered": historical_risks,
         "review": review,
         "confidence": confidence,

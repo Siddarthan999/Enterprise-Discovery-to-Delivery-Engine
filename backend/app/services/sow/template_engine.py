@@ -294,8 +294,6 @@ def _set_paragraph_text_preserve_format(paragraph, new_text: str):
 
 
 def _remove_paragraph(paragraph):
-    """Fully remove a paragraph from the document body, rather than leaving
-    a raw placeholder or stray heading text visible."""
     p = paragraph._p
     parent = p.getparent()
     if parent is not None:
@@ -303,8 +301,6 @@ def _remove_paragraph(paragraph):
 
 
 def _remove_sdt(sdt_element):
-    """Content-control variant of _remove_paragraph: remove a w:sdt node
-    entirely when its mapped field has no value."""
     parent = sdt_element.getparent()
     if parent is not None:
         parent.remove(sdt_element)
@@ -370,16 +366,8 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         "completion_date", datetime.utcnow().strftime("%B %d, %Y")
     )
 
-    # Cover-page cleanup must only ever touch paragraphs that sit BEFORE the
-    # body-content anchor ({{SOW_CONTENT}}). Everything from the anchor
-    # onward is body content that add_sow_content fills in next, so once we
-    # reach it we stop scrubbing -- this keeps the stray-heading check below
-    # from ever being able to remove a *real* section heading, even if this
-    # function is ever re-run against an already-merged document.
     body_anchor = _find_body_placeholder(doc)
 
-    # doc.paragraphs is already a materialized list, so it's safe to mutate
-    # (remove paragraphs) while iterating it below.
     for para in doc.paragraphs:
         if body_anchor is not None and para._p is body_anchor._p:
             break
@@ -399,9 +387,6 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             if value:
                 _set_paragraph_text_preserve_format(para, value)
             else:
-                # No value supplied -> remove the placeholder paragraph
-                # entirely instead of leaving "Sub-Headline" / "Company
-                # Name" sitting in the rendered document.
                 _remove_paragraph(para)
             continue
 
@@ -415,9 +400,6 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             _remove_paragraph(para)
             continue
 
-    # doc.element.body.iter(qn("w:sdt")) is a *live* tree traversal, so it
-    # must be materialized into a list before we start removing nodes from
-    # the tree mid-iteration.
     for sdt in list(doc.element.body.iter(qn("w:sdt"))):
         raw_text = _sdt_placeholder_text(sdt)
         if not raw_text:
@@ -458,13 +440,11 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             _remove_sdt(sdt)
             continue
 
-
 # ----------------------------
 # TEMPLATE LOADER
 # ----------------------------
 def load_template(template_path: str) -> Document:
     return Document(template_path)
-
 
 # ----------------------------
 # CONTENT INSERTION HELPERS
@@ -474,7 +454,6 @@ def _find_body_placeholder(doc: Document, placeholder: str = _SOW_BODY_PLACEHOLD
         if placeholder in (para.text or ""):
             return para
     return None
-
 
 def _clear_placeholder_paragraph(paragraph):
     if paragraph is None:
@@ -486,12 +465,10 @@ def _clear_placeholder_paragraph(paragraph):
     else:
         paragraph.text = ""
 
-
 def _insert_paragraph_after(anchor: Paragraph, text: str = "", style=None) -> Paragraph:
     new_p = anchor.insert_paragraph_before(text=text, style=style)
     anchor._p.addnext(new_p._p)
     return new_p
-
 
 def _add_inline_runs(paragraph, text: str):
     parts = re.split(r"(\*\*.*?\*\*|\*.*?\*)", text)
@@ -529,16 +506,6 @@ def _split_table_row(line: str) -> list[str]:
 # via a named style that may not exist in the destination template)
 # ----------------------------
 def _set_table_borders(table, color_hex: str = "999999", size: str = "4"):
-    """Draw an explicit grid on the table via raw OXML.
-
-    Relying on `table.style = "Table Grid"` is not safe: some destination
-    templates simply don't define a "Table Grid" style, in which case the
-    assignment fails and is silently swallowed by a bare try/except,
-    leaving the table rendered with the borderless "Normal Table" style --
-    which in Word looks like the table isn't there at all. Defining
-    borders directly on the table's own tblPr guarantees a visible grid
-    regardless of what styles the destination template happens to define.
-    """
     tbl_pr = table._tbl.tblPr
     borders = OxmlElement("w:tblBorders")
     for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
@@ -569,7 +536,6 @@ def _shade_cell(cell, fill_hex: str):
 
 
 def _mark_header_row_repeat(table):
-    """Repeat the header row on every page if the table spans a page break."""
     tr = table.rows[0]._tr
     tr_pr = tr.get_or_add_trPr()
     header_el = OxmlElement("w:tblHeader")
@@ -702,30 +668,10 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
 
     return doc
 
-
-# Style names that add_sow_content() actually uses for generated section
-# headings (see _build_sow_styles). Used by the final safety-net cleanup
-# below to find where the *real* body content starts.
 _GENERATED_HEADING_STYLE_NAMES = ("SOW Title", "SOW Heading 1")
 
 
 def _dedupe_stray_cover_headings(doc: Document):
-    """Final safety net, run at the very end of export_docx_from_template,
-    after the real SOW body has already been merged in.
-
-    apply_cover_page_fields() is supposed to strip any pre-existing/stray
-    section-heading text baked into a template's cover page (e.g. a
-    hardcoded "1. CONTACT INFORMATION" placed above the real content by
-    whoever authored the .docx template) *before* the real body content is
-    inserted. This function is a second, independent pass that catches the
-    same problem afterwards instead of beforehand -- so a duplicate heading
-    still gets removed even if apply_cover_page_fields was skipped, failed
-    silently, or ran against a different document than the one actually
-    rendered, for any reason.
-
-    It only ever removes paragraphs that sit BEFORE the first real
-    generated heading, so it can never touch legitimate body content.
-    """
     paragraphs = doc.paragraphs
 
     first_real_heading_idx = None

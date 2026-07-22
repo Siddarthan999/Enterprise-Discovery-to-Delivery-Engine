@@ -5,6 +5,8 @@ import { Sparkles, Loader2, ChevronDown, ListTree } from "lucide-react";
 
 export default function DiscoveryPanel({
   transcript,
+  authorId,
+  templateId,
   state,
   setState,
   setSow,
@@ -14,6 +16,8 @@ export default function DiscoveryPanel({
   setHistoricalRisksConsidered,
 }: {
   transcript: string;
+  authorId?: number | "";
+  templateId?: string;
   state: any;
   setState: (v: any) => void;
   setSow: (v: string) => void;
@@ -62,7 +66,11 @@ export default function DiscoveryPanel({
       const sowRes = await fetch("http://localhost:8000/api/sow/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: data.state }),
+        body: JSON.stringify({
+          state: data.state,
+          template_id: templateId || undefined,
+          author_id: authorId || undefined,
+        }),
       });
 
       const sowData = await sowRes.json();
@@ -102,10 +110,10 @@ export default function DiscoveryPanel({
   }
 
   const fieldCount = state
-  ? Object.keys(state).filter(
-      (key) => key !== "error" && key !== "frontend_error" && key !== "raw_response"
-    ).length
-  : 0;
+    ? Object.keys(state).filter(
+        (key) => key !== "error" && key !== "frontend_error" && key !== "raw_response"
+      ).length
+    : 0;
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -116,7 +124,7 @@ export default function DiscoveryPanel({
         <div>
           <h2 className="text-lg font-medium">Discovery Engine</h2>
           <p className="text-xs text-zinc-400">
-            Extract structured project state from transcript
+            Extract structured project state from client context
           </p>
         </div>
       </div>
@@ -148,7 +156,6 @@ export default function DiscoveryPanel({
         </div>
       )}
 
-      {/* State summary */}
       {state && (
         <div className="mt-5 rounded-lg border border-zinc-800 bg-zinc-950/60">
           <button
@@ -166,7 +173,7 @@ export default function DiscoveryPanel({
           </button>
 
           {showDetails && (
-            <pre className="max-h-64 overflow-auto border-t border-zinc-800 p-4 text-xs text-zinc-300">
+            <pre className="dark-scrollbar max-h-64 overflow-auto border-t border-zinc-800 p-4 text-xs text-zinc-300">
               {JSON.stringify(state, null, 2)}
             </pre>
           )}
