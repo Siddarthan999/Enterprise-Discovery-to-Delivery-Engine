@@ -1,7 +1,7 @@
 import requests
 
 OLLAMA_URL = "http://host.docker.internal:11434/api/generate"
-MODEL = "qwen2.5:7b"
+MODEL = "qwen2.5-coder:3b"
 
 
 def generate_ollama(prompt: str) -> str:

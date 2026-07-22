@@ -7,6 +7,7 @@ type Props = {
   sows: any[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  activeAuthor?: string | null;
 };
 
 function statusDot(status: string) {
@@ -24,8 +25,13 @@ export default function SowList({
   loading,
   sows,
   selectedId,
+  activeAuthor,
   onSelect,
 }: Props) {
+  const emptyMessage = activeAuthor
+    ? `No generated SOWs found for ${activeAuthor}.`
+    : "No generated SOWs found.";
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-white/10 bg-zinc-900/70 px-5 py-4 text-sm text-zinc-500">
@@ -37,7 +43,7 @@ export default function SowList({
   if (sows.length === 0) {
     return (
       <div className="rounded-2xl border border-white/10 bg-zinc-900/70 px-5 py-4 text-sm text-zinc-500">
-        No generated SOWs found.
+        {emptyMessage}
       </div>
     );
   }
@@ -70,7 +76,7 @@ export default function SowList({
                 />
               </div>
 
-             <div className="flex items-center text-[11px] text-zinc-500">
+              <div className="flex items-center text-[11px] text-zinc-500">
                 <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
                   <User size={10} className="shrink-0" />
                   <span className="truncate">{sow.author ?? "Unknown"}</span>
@@ -83,7 +89,7 @@ export default function SowList({
                     {sow.current_stage}
                   </span>
                 </div>
-            </div>
+              </div>
             </button>
           );
         })}
