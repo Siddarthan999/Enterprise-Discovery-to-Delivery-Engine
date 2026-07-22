@@ -134,6 +134,8 @@ IMPORTANT RULES:
 6. Preserve formatting exactly.
 7. If only one sentence changes, rewrite only that sentence.
 8. Return the COMPLETE markdown document.
+9. DO NOT wrap the response in ```markdown or ``` code fences.
+10. DO NOT include "Current SOW", separator lines (-----), "Reviewer comments".
 
 Current SOW
 
@@ -154,7 +156,8 @@ Reviewer comments:
 
     prompt += """
 
-Return ONLY the updated markdown.
+Output ONLY the revised SOW markdown document. Do not include anything before or after it.
+
 """
 
     return prompt

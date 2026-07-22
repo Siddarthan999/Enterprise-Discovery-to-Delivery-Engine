@@ -253,7 +253,9 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
         format,
         exportTemplateId || undefined,
         null,
-        null
+        null,
+        document.id,
+        version.version
       );
       const blob = res.data;
       const url = window.URL.createObjectURL(blob);

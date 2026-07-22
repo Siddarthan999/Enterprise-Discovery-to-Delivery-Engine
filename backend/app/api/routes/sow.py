@@ -803,6 +803,7 @@ def generate_sow(payload: SOWRequest):
             title=project_name,
             markdown=review_markdown,
             author_id=payload.author_id,
+            state=state,
             review=review,
             confidence=confidence,
             historical_sows_used=historical_sows_used,
