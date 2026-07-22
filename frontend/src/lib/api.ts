@@ -221,3 +221,6 @@ export const updateSowTitle = (payload: any) =>
 
 export const compareVersions = (sowId: number, v1: number, v2: number) =>
   API.get(`/approval/sows/${sowId}/compare/${v1}/${v2}`).then(res => res.data);
+
+export const runVersionReview = (payload: { sow_id: number; version: number; mode?: "current" | "new";}) => 
+  API.post("/approval/sows/" + payload.sow_id + "/version/" + payload.version + "/run-review", payload).then((res) => res.data);

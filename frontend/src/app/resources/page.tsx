@@ -274,25 +274,25 @@ export default function ResourcesPage() {
                 {isTemplates
                   ? "DOCX files used as the base layout/branding for generated SOWs."
                   : isHistory
-                  ? "Completed SOWs from past engagements. Used to ground new SOWs in your firm's actual drafting style and to surface precedent risks — never shown in chat or search."
+                  ? "Completed SOWs from past engagements. Used to ground new SOWs in your firm's actual drafting style and to surface precedent risks."
                   : "PDF, DOCX, TXT, PPTX, MD, or EML files — parsed and embedded for search and discovery context."}
               </p>
 
-              <div className="mt-4 rounded-2xl border border-dashed border-[#c90c61]/30 bg-zinc-950/70 p-8 text-center">
+              <div className="mt-4 rounded-2xl border border-dashed border-[#c90c61]/30 bg-zinc-950/70 p-4 text-center">
                 <label
                   htmlFor="file-upload"
-                  className="mx-auto flex w-fit cursor-pointer flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-8 py-6 transition hover:border-[#c90c61]/50 hover:bg-white/[0.05]"
+                  className="mx-auto flex w-fit cursor-pointer items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 transition hover:border-[#c90c61]/50 hover:bg-white/[0.05]"
                 >
-                  <div className="rounded-full bg-[#c90c61]/15 p-4 text-[#c90c61]">
+                  <div className="rounded-full bg-[#c90c61]/15 p-3 text-[#c90c61]">
                     <UploadIcon />
                   </div>
 
-                  <div>
+                  <div className="text-left">
                     <p className="text-sm font-medium text-white">
                       {file ? file.name : "Choose a file"}
                     </p>
 
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="text-xs text-zinc-500">
                       Click to browse files
                     </p>
                   </div>
@@ -311,14 +311,14 @@ export default function ResourcesPage() {
                   <button
                     onClick={handleUpload}
                     disabled={uploading}
-                    className="mt-5 rounded-xl bg-[#c90c61] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#a70a4d] disabled:opacity-50"
+                    className="mt-3 rounded-xl bg-[#c90c61] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#a70a4d] disabled:opacity-50"
                   >
                     {uploading ? "Uploading..." : "Upload File"}
                   </button>
                 )}
 
                 {error && (
-                  <p className="mt-4 text-xs text-red-400">
+                  <p className="mt-3 text-xs text-red-400">
                     {error}
                   </p>
                 )}
