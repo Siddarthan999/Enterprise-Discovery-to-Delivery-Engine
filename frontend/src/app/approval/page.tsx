@@ -7,25 +7,9 @@ import AppNav from "@/components/layout/AppNav";
 import SowList from "@/components/approval/SowList";
 import SowApprovalViewer from "@/components/approval/SowApprovalViewer";
 
-import {
-  getApprovalSows,
-  getApprovalSow,
-  getApprovalComments,
-  getVersions,
-  getVersion,
-  deleteSow,
-  deleteVersion,
-  compareVersions,
-  getAuthors
-} from "@/lib/api";
+import { getApprovalSows, getApprovalSow, getApprovalComments, getVersions, getVersion, deleteSow, deleteVersion, compareVersions, getAuthors, } from "@/lib/api";
 
-const ROLES = [
-  "Architect",
-  "Practice Lead",
-  "Legal",
-  "CFO",
-  "Client",
-];
+const ROLES = [ "Architect", "Practice Lead", "Legal", "CFO", "Client", ];
 
 export default function ApprovalPage() {
   const [viewerRole, setViewerRole] = useState("Architect");
@@ -40,6 +24,7 @@ export default function ApprovalPage() {
 
   const [versions, setVersions] = useState<any[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [selectedVersionData, setSelectedVersionData] = useState<any>(null);
 
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareFrom, setCompareFrom] = useState<number | null>(null);
@@ -93,6 +78,11 @@ export default function ApprovalPage() {
 
       if (sow?.document?.current_version) {
         setSelectedVersion(sow.document.current_version);
+        const versionData = await getVersion(id, sow.document.current_version);
+        setSelectedVersionData(versionData);
+      } else {
+        setSelectedVersion(null);
+        setSelectedVersionData(null);
       }
     } finally {
       setLoadingDocument(false);
@@ -136,6 +126,7 @@ export default function ApprovalPage() {
       setComments([]);
       setVersions([]);
       setSelectedVersion(null);
+      setSelectedVersionData(null);
       return;
     }
 
@@ -150,6 +141,7 @@ export default function ApprovalPage() {
     const data = await getVersion(selectedSowId, version);
 
     setSelectedVersion(version);
+    setSelectedVersionData(data);
 
     setSelectedSow({
       ...selectedSow,
@@ -192,8 +184,9 @@ export default function ApprovalPage() {
     setComments([]);
     setVersions([]);
     setSelectedVersion(null);
+    setSelectedVersionData(null);
     setSelectedSowId(null);
-
+    
     await loadSows();
   }
 
@@ -475,6 +468,7 @@ export default function ApprovalPage() {
             compareFrom={compareFrom}
             compareTo={compareTo}
             onClearCompare={clearCompare}
+            selectedVersionData={selectedVersionData}
           />
         </div>
       </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare, Download, FileType, FileCode, ChevronDown } from "lucide-react";
-import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle, getTemplates, exportSow } from "@/lib/api";
+import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare, Download, FileType, FileCode, ChevronDown, Bot, Sparkles, Play,  } from "lucide-react";
+import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle, getTemplates, exportSow, runVersionReview } from "@/lib/api";
 import CommentsPanel from "./CommentsPanel";
+import ReviewPanel from "../sow/ReviewPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useState, useEffect, useRef } from "react";
@@ -17,6 +18,7 @@ type Props = {
   compareFrom?: number | null;
   compareTo?: number | null;
   onClearCompare?: () => void;
+  selectedVersionData?: any;
 };
 
 const EXPORT_FORMATS = [
@@ -38,7 +40,7 @@ function badge(status: string) {
   }
 }
 
-export default function SowApprovalViewer({loading, viewerRole, sow, comments, refresh, compareData, compareFrom, compareTo, onClearCompare}: Props) {
+export default function SowApprovalViewer({loading, viewerRole, sow, comments, refresh, compareData, compareFrom, compareTo, onClearCompare, selectedVersionData}: Props) {
   const document = sow?.document;
   const version = sow?.version;
 
@@ -61,6 +63,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const [postingComment, setPostingComment] = useState(false);
 
   const [approving, setApproving] = useState(false);
+  const [showReview, setShowReview] = useState(false);
 
   const compareContainerRef = useRef<HTMLDivElement | null>(null);
   const diffScopeRef = useRef<HTMLDivElement | null>(null);
@@ -71,9 +74,11 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [runningReview, setRunningReview] = useState(false);
 
   useEffect(() => {
     setMarkdown(version?.markdown ?? "");
+    setShowReview(false);
   }, [version]);
 
   useEffect(() => {
@@ -168,9 +173,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
     );
   }
 
-  const canApprove =
-    viewerRole === document.current_stage &&
-    document.status !== "Approved";
+  const canApprove = viewerRole === document.current_stage && document.status !== "Approved";
 
   async function handleApprove() {
     setApproving(true);
@@ -233,11 +236,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
       setShowCommentDialog(false);
       setCommentText("");
 
-      setPopup({
-          visible: false,
-          x: 0,
-          y: 0,
-      });
+      setPopup({ visible: false, x: 0, y: 0, });
 
       await refresh();
     } finally {
@@ -270,6 +269,23 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
       setExportMenuOpen(false);
     }
   }
+  
+  async function handleRunReview() {
+    setRunningReview(true);
+    try {
+      await runVersionReview({
+        sow_id: document.id,
+        version: document.current_version,
+        mode: "current",
+      });
+      await refresh();
+    } finally {
+      setRunningReview(false);
+    }
+  }
+  
+  const reviewData = selectedVersionData?.review;
+  const confidenceData = selectedVersionData?.confidence;
 
   return (
     <div className="space-y-4">
@@ -559,6 +575,100 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
             comments={comments}
             refresh={refresh}
           />
+        </div>
+
+        {/* Reviewer Agents View */}
+        <div className="border-t border-white/10 p-3">
+          <button
+            onClick={handleRunReview}
+            disabled={runningReview}
+            className={`group mb-3 flex w-full items-center justify-between rounded-xl border px-4 py-3 transition-all duration-200 ${
+              runningReview
+                ? "border-cyan-500/40 bg-cyan-500/10"
+                : "border-white/10 bg-zinc-900 hover:border-cyan-500/40 hover:bg-cyan-500/5"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-lg p-2 transition ${
+                  runningReview
+                    ? "bg-cyan-500/20 text-cyan-400"
+                    : "bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/20 group-hover:text-cyan-400"
+                }`}
+              >
+                {runningReview ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Play size={18} />
+                )}
+              </div>
+
+              <div className="text-left">
+                <p className="text-sm font-semibold text-white">
+                  Run Reviewer Agents
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {runningReview
+                    ? "AI agents are reviewing this SOW..."
+                    : "Execute all AI reviewers and generate feedback"}
+                </p>
+              </div>
+            </div>
+
+            {!runningReview && (
+              <Sparkles
+                size={18}
+                className="text-zinc-500 transition group-hover:text-cyan-400"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setShowReview((v) => !v)}
+            className={`group flex w-full items-center justify-between rounded-xl border px-4 py-3 transition-all duration-200 ${
+              showReview
+                ? "border-[#c90c61]/40 bg-[#c90c61]/10 shadow-lg shadow-[#c90c61]/10"
+                : "border-white/10 bg-zinc-900 hover:border-[#c90c61]/30 hover:bg-zinc-800/80"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-lg p-2 transition ${
+                  showReview
+                    ? "bg-[#c90c61]/20 text-[#c90c61]"
+                    : "bg-[#c90c61]/10 text-[#c90c61] group-hover:bg-[#c90c61]/20 group-hover:text-[#d91d72]"
+                }`}
+              >
+                <Bot size={18} />
+              </div>
+
+              <div className="text-left">
+                <p className="text-sm font-semibold text-white">
+                  AI Reviewer Agents
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {showReview
+                    ? "Hide review analysis"
+                    : "View AI review, confidence & recommendations"}
+                </p>
+              </div>
+            </div>
+
+            <ChevronDown
+              size={18}
+              className={`text-zinc-400 transition-transform duration-300 ${
+                showReview ? "rotate-180 text-[#c90c61]" : ""
+              }`}
+            />
+          </button>
+
+          {showReview && (
+            <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <ReviewPanel
+                review={reviewData}
+                confidence={confidenceData}
+              />
+            </div>
+          )}
         </div>
       </div>
 
