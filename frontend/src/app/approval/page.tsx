@@ -16,6 +16,7 @@ import {
   deleteSow,
   deleteVersion,
   compareVersions,
+  getAuthors
 } from "@/lib/api";
 
 const ROLES = [
@@ -28,6 +29,8 @@ const ROLES = [
 
 export default function ApprovalPage() {
   const [viewerRole, setViewerRole] = useState("Architect");
+  const [authors, setAuthors] = useState<any[]>([]);
+  const [selectedAuthor, setSelectedAuthor] = useState<string>("all");
 
   const [sows, setSows] = useState<any[]>([]);
   const [selectedSowId, setSelectedSowId] = useState<number | null>(null);
@@ -46,6 +49,15 @@ export default function ApprovalPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDocument, setLoadingDocument] = useState(false);
 
+  function normalizeAuthor(value: string | null | undefined) {
+    return (value ?? "").trim().toLowerCase();
+  }
+
+  function matchesAuthorFilter(authorName: string | null | undefined) {
+    if (selectedAuthor === "all") return true;
+    return normalizeAuthor(authorName) === normalizeAuthor(selectedAuthor);
+  }
+
   async function loadSows() {
     setLoadingList(true);
 
@@ -54,8 +66,12 @@ export default function ApprovalPage() {
 
       setSows(data);
 
-      if (data.length > 0 && selectedSowId == null) {
-        setSelectedSowId(data[0].id);
+      const filteredAfterLoad = data.filter((sow: any) => matchesAuthorFilter(sow.author));
+      if (filteredAfterLoad.length > 0 && selectedSowId == null) {
+        setSelectedSowId(filteredAfterLoad[0].id);
+      }
+      if (filteredAfterLoad.length === 0) {
+        setSelectedSowId(null);
       }
     } finally {
       setLoadingList(false);
@@ -87,6 +103,18 @@ export default function ApprovalPage() {
     loadSows();
   }, []);
 
+    useEffect(() => {
+    async function loadAuthors() {
+      try {
+        const data = await getAuthors();
+        setAuthors(data);
+      } catch (err) {
+        console.error("Failed to load authors", err);
+      }
+    }
+    loadAuthors();
+  }, []);
+
   useEffect(() => {
     if (selectedSowId != null) {
       loadSelectedSow(selectedSowId);
@@ -96,6 +124,25 @@ export default function ApprovalPage() {
       setCompareData(null);
     }
   }, [selectedSowId]);
+
+  useEffect(() => {
+    const filtered = sows.filter((sow) => matchesAuthorFilter(sow.author));
+
+    if (filtered.length === 0) {
+      if (selectedSowId !== null) {
+        setSelectedSowId(null);
+      }
+      setSelectedSow(null);
+      setComments([]);
+      setVersions([]);
+      setSelectedVersion(null);
+      return;
+    }
+
+    if (!filtered.some((sow) => sow.id === selectedSowId)) {
+      setSelectedSowId(filtered[0].id);
+    }
+  }, [selectedAuthor, sows]);
 
   async function handleVersionChange(version: number) {
     if (!selectedSowId) return;
@@ -178,6 +225,8 @@ export default function ApprovalPage() {
   const isFullyApproved = documentStatus === "Approved";
 
   const canRunCompare = compareFrom != null && compareTo != null && compareFrom !== compareTo;
+  const filteredSows = sows.filter((sow) => matchesAuthorFilter(sow.author));
+  const hasAnySows = sows.length > 0;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_45%),_linear-gradient(135deg,_#050816_0%,_#0b1120_45%,_#020617_100%)] text-white">
@@ -187,7 +236,7 @@ export default function ApprovalPage() {
 
         {/* Header */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-cyan-950/20">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
                 <ClipboardCheck size={20} />
@@ -202,19 +251,41 @@ export default function ApprovalPage() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-              <label className="text-xs text-zinc-500">Viewing as</label>
-              <select
-                value={viewerRole}
-                onChange={(e) => setViewerRole(e.target.value)}
-                className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-sm outline-none focus:border-cyan-500/50"
-              >
-                {ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+
+              {hasAnySows && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-zinc-500">Author</label>
+                  <select
+                    value={selectedAuthor}
+                    onChange={(e) => setSelectedAuthor(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-sm outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="all">All authors</option>
+                    {authors.map((author) => (
+                      <option key={author.id} value={author.name}>
+                        {author.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-zinc-500">Viewing as</label>
+                <select
+                  value={viewerRole}
+                  onChange={(e) => setViewerRole(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-sm outline-none focus:border-cyan-500/50"
+                >
+                  {ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
             </div>
           </div>
 
@@ -271,8 +342,9 @@ export default function ApprovalPage() {
         <div className="mt-4">
           <SowList
             loading={loadingList}
-            sows={sows}
+            sows={filteredSows}
             selectedId={selectedSowId}
+            activeAuthor={selectedAuthor === "all" ? null : selectedAuthor}
             onSelect={setSelectedSowId}
           />
         </div>
