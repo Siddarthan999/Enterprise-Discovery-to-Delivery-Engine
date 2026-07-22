@@ -6,6 +6,15 @@ from pydantic import BaseModel
 from app.core.llm_router import generate_completion
 from difflib import HtmlDiff
 
+from app.services.sow_history.sow_history_search import (
+    search_similar_historical_risks,
+    search_similar_historical_sows,
+)
+from app.services.sow_agents.sow_review_orchestrator import review_sow_draft
+from app.services.sow_agents.sow_confidence import compute_sow_confidence
+from app.services.sow.save_sow import save_generated_sow
+from app.api.routes.sow import build_context_summary
+
 router = APIRouter(prefix="/approval", tags=["approval"])
 
 APPROVAL_FLOW = [
@@ -26,7 +35,6 @@ class CommentRequest(BaseModel):
     selected_text:str|None=None
     start_offset:int|None=None
     end_offset:int|None=None
-
 
 class ApproveRequest(BaseModel):
     sow_id: int
@@ -49,6 +57,62 @@ class UpdateVersionRequest(BaseModel):
 class UpdateTitleRequest(BaseModel):
     sow_id: int
     title: str
+
+class RunReviewRequest(BaseModel):
+    sow_id: int
+    version: int
+    mode: str = "current"   # "current" or "new"
+
+def _json_load_maybe(value):
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    return value
+
+def _get_version_context(conn, sow_id: int, version: int):
+    version_row = conn.execute(text("""
+        SELECT v.*, d.title, d.author_id, d.current_version, d.current_stage, d.status
+        FROM sow_versions v
+        JOIN sow_documents d ON d.id = v.sow_id
+        WHERE v.sow_id = :sid
+          AND v.version = :ver
+    """), {"sid": sow_id, "ver": version}).mappings().first()
+
+    if not version_row:
+        return None
+
+    doc = dict(version_row)
+
+    for key in [
+        "review",
+        "confidence",
+        "historical_sows_used",
+        "historical_risks_considered",
+    ]:
+        doc[key] = _json_load_maybe(doc.get(key))
+
+    state = {
+        "project_name": doc.get("title") or "Untitled Project",
+        "state_json": {},
+    }
+
+    context_summary = build_context_summary(state)
+
+    historical_sows = search_similar_historical_sows(context_summary, limit=2)
+    historical_risks = search_similar_historical_risks(context_summary, limit=4)
+
+    return {
+        "doc": doc,
+        "historical_sows": historical_sows,
+        "historical_risks": historical_risks,
+        "review_markdown": doc.get("markdown") or "",
+    }
 
 def build_revision_prompt(markdown: str, comments: list[dict]):
 
@@ -637,3 +701,135 @@ def compare_versions(
     return {
         "diff": diff
     }
+
+@router.post("/sows/{sow_id}/version/{version}/run-review")
+def run_review(sow_id: int, version: int, payload: RunReviewRequest):
+    with engine.begin() as conn:
+        ctx = _get_version_context(conn, sow_id, version)
+        if not ctx:
+            return {"error": "Version not found"}
+
+        doc = ctx["doc"]
+        historical_sows = ctx["historical_sows"]
+        historical_risks = ctx["historical_risks"]
+        review_markdown = ctx["review_markdown"]
+
+        review = review_sow_draft(
+            state={
+                "project_name": doc.get("title") or "Untitled Project",
+            },
+            draft_markdown=review_markdown,
+            historical_sows=historical_sows,
+            historical_risks=historical_risks,
+        )
+
+        confidence = compute_sow_confidence(
+            review_result=review,
+            historical_sows=historical_sows,
+            historical_risks=historical_risks,
+            state={
+                "project_name": doc.get("title") or "Untitled Project",
+            },
+            draft_markdown=review_markdown,
+        )
+
+        historical_sows_used = [
+            {
+                "doc_id": s.get("doc_id"),
+                "title": s.get("title"),
+                "score": s.get("score"),
+            }
+            for s in historical_sows
+        ]
+
+        review_json = json.dumps(review)
+        confidence_json = json.dumps(confidence)
+        hs_json = json.dumps(historical_sows_used)
+        hr_json = json.dumps(historical_risks)
+
+        if payload.mode == "current" or version == doc["current_version"]:
+            conn.execute(text("""
+                UPDATE sow_versions
+                SET
+                    review = CAST(:review AS JSONB),
+                    confidence = CAST(:confidence AS JSONB),
+                    historical_sows_used = CAST(:historical_sows_used AS JSONB),
+                    historical_risks_considered = CAST(:historical_risks_considered AS JSONB)
+                WHERE sow_id = :sid
+                  AND version = :ver
+            """), {
+                "sid": sow_id,
+                "ver": version,
+                "review": review_json,
+                "confidence": confidence_json,
+                "historical_sows_used": hs_json,
+                "historical_risks_considered": hr_json,
+            })
+
+            return {
+                "success": True,
+                "mode": "current",
+                "sow_id": sow_id,
+                "version": version,
+                "review": review,
+                "confidence": confidence,
+                "historical_sows_used": historical_sows_used,
+                "historical_risks_considered": historical_risks,
+            }
+
+        next_version = int(doc["current_version"]) + 1
+
+        conn.execute(text("""
+            INSERT INTO sow_versions
+            (
+                sow_id,
+                version,
+                markdown,
+                created_by,
+                review,
+                confidence,
+                historical_sows_used,
+                historical_risks_considered
+            )
+            SELECT
+                sow_id,
+                :new_version,
+                markdown,
+                'AI Review',
+                CAST(:review AS JSONB),
+                CAST(:confidence AS JSONB),
+                CAST(:historical_sows_used AS JSONB),
+                CAST(:historical_risks_considered AS JSONB)
+            FROM sow_versions
+            WHERE sow_id = :sid
+              AND version = :ver
+        """), {
+            "sid": sow_id,
+            "ver": version,
+            "new_version": next_version,
+            "review": review_json,
+            "confidence": confidence_json,
+            "historical_sows_used": hs_json,
+            "historical_risks_considered": hr_json,
+        })
+
+        conn.execute(text("""
+            UPDATE sow_documents
+            SET current_version = :new_version,
+                updated_at = NOW()
+            WHERE id = :sid
+        """), {
+            "sid": sow_id,
+            "new_version": next_version,
+        })
+
+        return {
+            "success": True,
+            "mode": "new",
+            "sow_id": sow_id,
+            "version": next_version,
+            "review": review,
+            "confidence": confidence,
+            "historical_sows_used": historical_sows_used,
+            "historical_risks_considered": historical_risks,
+        }
