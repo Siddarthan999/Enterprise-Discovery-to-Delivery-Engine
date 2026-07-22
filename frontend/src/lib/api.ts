@@ -33,8 +33,10 @@ export const exportSow = (
   format: string,
   template_id?: string,
   state?: any,
-  transcript?: string
-) => API.post( "/sow/export", { sow, format, template_id, state, transcript,},{ responseType: "blob",} );
+  transcript?: string,
+  sow_id?: number,
+  version?: number
+) => API.post( "/sow/export", { sow, format, template_id, state, transcript, sow_id, version },{ responseType: "blob",} );
 
 //
 // Template APIs

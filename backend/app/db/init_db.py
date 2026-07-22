@@ -121,8 +121,15 @@ def init_db():
             historical_sows_used JSONB,
             historical_risks_considered JSONB,
 
+            source_state_json JSONB,
+
             UNIQUE (sow_id, version)
         )
+        """))
+
+        conn.execute(text("""
+            ALTER TABLE sow_versions
+            ADD COLUMN IF NOT EXISTS source_state_json JSONB
         """))
 
         conn.execute(text("""
