@@ -9,6 +9,8 @@ import {
   Square,
   CheckSquare,
   Loader2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 
 import {
@@ -40,6 +42,12 @@ export default function CommentsPanel({
 
   const [selected, setSelected] = useState<number[]>([]);
   const [runningAI, setRunningAI] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const canComment = viewerRole === currentStage;
 
@@ -61,6 +69,12 @@ export default function CommentsPanel({
       setComment("");
 
       await refresh();
+      setNotice({ type: "success", message: "Comment added." });
+    } catch (err: any) {
+      setNotice({
+        type: "error",
+        message: err?.response?.data?.error || "Unable to add comment.",
+      });
     } finally {
       setSaving(false);
     }
@@ -90,30 +104,41 @@ export default function CommentsPanel({
 
       await refresh();
 
-      alert("New AI revision created.");
+      setNotice({ type: "success", message: "New AI revision created." });
     } catch (err: any) {
-      alert(err?.response?.data?.error || "Failed");
+      setNotice({
+        type: "error",
+        message: err?.response?.data?.error || "Unable to create AI revision.",
+      });
     } finally {
       setRunningAI(false);
     }
   }
 
-  async function removeComment(id: number) {
-    if (!confirm("Delete this comment?")) return;
+  async function removeComment() {
+    if (pendingDeleteId == null) return;
 
+    setDeleting(true);
     try {
-      await deleteComment(id, viewerRole);
+      await deleteComment(pendingDeleteId, viewerRole);
 
-      setSelected((prev) => prev.filter((x) => x !== id));
+      setSelected((prev) => prev.filter((x) => x !== pendingDeleteId));
+      setPendingDeleteId(null);
 
       await refresh();
+      setNotice({ type: "success", message: "Comment deleted." });
     } catch (err: any) {
-      alert(err?.response?.data?.error || "Unable to delete comment");
+      setNotice({
+        type: "error",
+        message: err?.response?.data?.error || "Unable to delete comment.",
+      });
+    } finally {
+      setDeleting(false);
     }
   }
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-zinc-900/70">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/70">
 
       {/* Header — pinned, never scrolls away */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
@@ -146,6 +171,52 @@ export default function CommentsPanel({
 
       {/* Comments — the ONLY part that scrolls internally, fills all
           remaining vertical space in the panel */}
+      {notice && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div
+                className={`rounded-lg p-2 ${
+                  notice.type === "success"
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {notice.type === "success" ? (
+                  <CheckSquare size={18} />
+                ) : (
+                  <AlertTriangle size={18} />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-white">
+                  {notice.message}
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">
+                  The comments list has been updated.
+                </p>
+              </div>
+              <button
+                onClick={() => setNotice(null)}
+                title="Close"
+                className="rounded-md p-1 text-zinc-500 transition hover:bg-white/5 hover:text-white"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setNotice(null)}
+                className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-cyan-500"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="dark-scrollbar max-h-[420px] overflow-y-auto">
         {comments.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-zinc-500">
@@ -169,7 +240,7 @@ export default function CommentsPanel({
 
                   {c.selected_text && (
                     <div className="mt-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-2.5 py-1.5 text-xs italic text-yellow-200">
-                      "{c.selected_text}"
+                      &quot;{c.selected_text}&quot;
                     </div>
                   )}
 
@@ -199,7 +270,7 @@ export default function CommentsPanel({
                   )}
                   <button
                     disabled={c.reviewer_role !== viewerRole}
-                    onClick={() => removeComment(c.id)}
+                    onClick={() => setPendingDeleteId(c.id)}
                     title="Delete comment"
                     className="rounded-md p-1 text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-25"
                   >
@@ -251,6 +322,52 @@ export default function CommentsPanel({
           </button>
         </div>
       </div>
+
+      {pendingDeleteId != null && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-red-500/10 p-2 text-red-300">
+                <AlertTriangle size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-white">
+                  Delete comment?
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">
+                  This comment will be removed from the review thread.
+                </p>
+              </div>
+              <button
+                onClick={() => setPendingDeleteId(null)}
+                disabled={deleting}
+                title="Close"
+                className="rounded-md p-1 text-zinc-500 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDeleteId(null)}
+                disabled={deleting}
+                className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={removeComment}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-red-500 disabled:opacity-40"
+              >
+                {deleting && <Loader2 size={13} className="animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

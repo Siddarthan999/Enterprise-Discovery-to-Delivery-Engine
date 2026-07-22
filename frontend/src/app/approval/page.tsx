@@ -78,8 +78,10 @@ export default function ApprovalPage() {
     }
   }
 
-  async function loadSelectedSow(id: number) {
-    setLoadingDocument(true);
+  async function loadSelectedSow(id: number, showLoading = true) {
+    if (showLoading) {
+      setLoadingDocument(true);
+    }
 
     try {
       const sow = await getApprovalSow(id);
@@ -95,7 +97,9 @@ export default function ApprovalPage() {
         setSelectedVersion(sow.document.current_version);
       }
     } finally {
-      setLoadingDocument(false);
+      if (showLoading) {
+        setLoadingDocument(false);
+      }
     }
   }
 
@@ -215,7 +219,7 @@ export default function ApprovalPage() {
   async function refreshCurrent() {
     if (selectedSowId == null) return;
 
-    await loadSelectedSow(selectedSowId);
+    await loadSelectedSow(selectedSowId, false);
     await loadSows();
   }
 
