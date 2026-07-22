@@ -9,6 +9,7 @@ def save_generated_sow(
     title: str,
     markdown: str,
     author_id: int | None,
+    state: dict | None = None,
     review: dict | None = None,
     confidence: dict | None = None,
     historical_sows_used: list | None = None,
@@ -47,7 +48,8 @@ def save_generated_sow(
                 review,
                 confidence,
                 historical_sows_used,
-                historical_risks_considered
+                historical_risks_considered,
+                source_state_json
             )
             VALUES
             (
@@ -58,7 +60,8 @@ def save_generated_sow(
                 CAST(:review AS JSONB),
                 CAST(:confidence AS JSONB),
                 CAST(:historical_sows_used AS JSONB),
-                CAST(:historical_risks_considered AS JSONB)
+                CAST(:historical_risks_considered AS JSONB),
+                CAST(:source_state_json AS JSONB)
             )
             RETURNING id
             """),
@@ -69,6 +72,7 @@ def save_generated_sow(
                 "confidence": json.dumps(confidence) if confidence is not None else None,
                 "historical_sows_used": json.dumps(historical_sows_used) if historical_sows_used is not None else None,
                 "historical_risks_considered": json.dumps(historical_risks_considered) if historical_risks_considered is not None else None,
+                "source_state_json": json.dumps(state) if state is not None else None,
             },
         ).scalar()
 
