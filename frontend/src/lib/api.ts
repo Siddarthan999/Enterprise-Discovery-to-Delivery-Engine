@@ -226,3 +226,45 @@ export const compareVersions = (sowId: number, v1: number, v2: number) =>
 
 export const runVersionReview = (payload: { sow_id: number; version: number; mode?: "current" | "new";}) => 
   API.post("/approval/sows/" + payload.sow_id + "/version/" + payload.version + "/run-review", payload).then((res) => res.data);
+
+// Add this function to your existing api.ts file
+
+export async function emailSow(
+  sow: string,
+  format: string,
+  recipientEmail: string,
+  templateId?: string,
+  state?: any,
+  transcript?: string,
+  sowId?: number,
+  version?: number,
+  senderName?: string,
+  customMessage?: string
+) {
+  const payload: any = {
+    sow,
+    format,
+    recipient_email: recipientEmail,
+  };
+
+  if (templateId) payload.template_id = templateId;
+  if (state) payload.state = state;
+  if (transcript) payload.transcript = transcript;
+  if (sowId) payload.sow_id = sowId;
+  if (version) payload.version = version;
+  if (senderName) payload.sender_name = senderName;
+  if (customMessage) payload.custom_message = customMessage;
+
+  const response = await fetch(`${API_BASE}/sow/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to send email");
+  }
+
+  return response.json();
+}
