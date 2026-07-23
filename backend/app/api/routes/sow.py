@@ -36,6 +36,30 @@ MANDATORY_SOW_SECTIONS = [
 # contract's bullet character rather than a markdown "-".
 BULLET = "\u25cf"  # ●
 
+# These two values were previously duplicated as separate literal strings
+# in more than one place (the StructuredSOW field default AND the example
+# JSON schema embedded in the prompt; "Net 30" similarly in the field
+# default AND the render-time fallback). Defining them once here means
+# there's a single place to change them, and no risk of the copies quietly
+# drifting apart.
+DEFAULT_AGREEMENT_REFERENCE = (
+    "the Master Subscription Agreement, including the Professional Services Addendum"
+)
+DEFAULT_PAYMENT_TERMS = "Net 30"
+
+
+def _section_heading(section_name: str) -> str:
+    """Build a numbered '## N. TITLE' markdown heading from
+    MANDATORY_SOW_SECTIONS, instead of hardcoding the section number and
+    title as a literal string at each call site in
+    _structured_sow_to_markdown(). MANDATORY_SOW_SECTIONS is already the
+    canonical list used to build the prompt's section list, so this keeps
+    numbering/titles defined in exactly one place instead of two that can
+    silently go out of sync."""
+    index = MANDATORY_SOW_SECTIONS.index(section_name) + 1
+    return f"## {index}. {section_name.upper()}"
+
+
 class SOWRequest(BaseModel):
     state: dict | None = None
     template_id: str | None = None
@@ -84,9 +108,7 @@ class ApprovalRow(BaseModel):
 class StructuredSOW(BaseModel):
     # --- Legal preamble ---
     provider_legal_name: str = "TBD"
-    agreement_reference: str = (
-        "the Master Subscription Agreement, including the Professional Services Addendum"
-    )
+    agreement_reference: str = DEFAULT_AGREEMENT_REFERENCE
 
     # --- 1. Contact Information ---
     customer_legal_name: str = "TBD"
@@ -111,7 +133,7 @@ class StructuredSOW(BaseModel):
     fee_amount: str = "TBD"
     start_date: str = "TBD"
     end_date: str = "TBD"
-    payment_terms: str = "Net 30"
+    payment_terms: str = DEFAULT_PAYMENT_TERMS
 
     # --- 6. Expenses ---
     expenses_terms: str = (
@@ -418,8 +440,7 @@ CONTENT QUALITY RULES:
     enough detail that a customer reading it knows exactly what is expected of them and by
     when, where the input supports that level of detail,
   - populate customer_resources with role-based staffing expectations (e.g. Executive
-    Sponsor, Project Manager, IT/Dev resource, Subject Matter Experts, Change &
-    Communications Lead). For each row: `role` MUST always be the generic role/title \u2014
+    Sponsor, Project Manager, etc). Please don't limit to these only. For each row: `role` MUST always be the generic role/title \u2014
     NEVER a specific person's name, even if the transcript names an individual for that
     role. If the transcript or state ties a named individual to a role, that person's name
     may be woven into the `description` (e.g. "Primary escalation point; currently
@@ -452,7 +473,7 @@ PLACEHOLDER & SAFETY RULES:
 Return ONLY valid JSON with this structure:
 {{
   "provider_legal_name": "TBD",
-  "agreement_reference": "the Master Subscription Agreement, including the Professional Services Addendum",
+  "agreement_reference": "{DEFAULT_AGREEMENT_REFERENCE}",
   "customer_legal_name": "TBD",
   "customer_contact_name": "TBD",
   "customer_contact_title": "TBD",
@@ -471,7 +492,7 @@ Return ONLY valid JSON with this structure:
   "fee_amount": "TBD",
   "start_date": "TBD",
   "end_date": "TBD",
-  "payment_terms": "Net 30",
+  "payment_terms": "{DEFAULT_PAYMENT_TERMS}",
   "expenses_terms": "",
   "invoicing_terms": "",
   "provider_signee_name": "TBD",
@@ -607,7 +628,7 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
         # "## " prefix routes this through the styles["h1"] heading branch in
         # template_engine.add_sow_content() instead of the numbered-list
         # branch (re.match(r"^\d+\.\s+", line)).
-        "## 1. CONTACT INFORMATION",
+        _section_heading("Contact Information"),
         "",
         # Bold field labels ("**Label:** value") so the contact block reads
         # as a scannable form rather than a wall of plain text.
@@ -617,7 +638,7 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
         f"**Address:** {_fmt_optional(sow.customer_address)}",
         f"**Email:** {_fmt_optional(sow.customer_contact_email)}",
         "",
-        "## 2. ENGAGEMENT OBJECTIVES & SCOPE",
+        _section_heading("Engagement Objectives & Scope"),
         "",
     ]
 
@@ -645,7 +666,7 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
 
     lines.extend(
         [
-            "## 3. CUSTOMER OBLIGATIONS AND EXPECTATIONS",
+            _section_heading("Customer Obligations and Expectations"),
             "",
         ]
     )
@@ -681,14 +702,14 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
     lines.extend(
         [
             "",
-            "## 4. OUT-OF-SCOPE & CHANGE ORDERS",
+            _section_heading("Out-of-Scope & Change Orders"),
             "",
             sow.out_of_scope_change_control
             or "Any work not specifically set forth as Professional Services within this SOW "
             "is out of scope. Changes to the scope of this SOW require a fully executed "
             "Change Order signed by both parties.",
             "",
-            "## 5. SCHEDULE AND FEES",
+            _section_heading("Schedule and Fees"),
             "",
             "Subject to the terms herein, the Professional Services described in this SOW are "
             "bid on a fixed fee basis set forth below with the estimated duration post "
@@ -705,13 +726,13 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "",
             f"All Professional Services fees and taxes, if applicable, will be invoiced upon "
             f"SOW signature and shall be due and payable in accordance with the terms of the "
-            f"Agreement ({_fmt_optional(sow.payment_terms, 'Net 30')}).",
+            f"Agreement ({_fmt_optional(sow.payment_terms, DEFAULT_PAYMENT_TERMS)}).",
             "",
-            "## 6. EXPENSES",
+            _section_heading("Expenses"),
             "",
             sow.expenses_terms,
             "",
-            "## 7. INVOICES",
+            _section_heading("Invoices"),
             "",
             sow.invoicing_terms,
             "",
