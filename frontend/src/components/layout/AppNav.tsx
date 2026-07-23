@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, CircleCheck , FileText, Layers3, Search } from "lucide-react";
+import { Bot, CircleCheck , FileText, Layers3, Search, Workflow } from "lucide-react";
 import Image from "next/image";
 import App from "next/app";
 
@@ -12,6 +12,7 @@ const items = [
   { href: "/sow", label: "SOW", icon: FileText },
   { href: "/resources", label: "Resources", icon: Layers3 },
   { href: "/approval", label: "Approval", icon: CircleCheck },
+  { href: "/delivery", label: "Delivery", icon: Workflow },
 ];
 
 export default function AppNav() {

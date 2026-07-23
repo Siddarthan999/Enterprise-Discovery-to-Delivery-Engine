@@ -11,22 +11,14 @@ const API = axios.create({
 //
 // Discovery APIs
 //
-export const runDiscovery = (
-  transcript: string,
-  title?: string
-) =>
-  API.post("/discovery/extract", {
-    transcript,
-    title,
-  }).then((res) => res.data);
+export const runDiscovery = (transcript: string,title?: string) =>
+  API.post("/discovery/extract", {transcript,title,}).then((res) => res.data);
 
 //
 // SOW APIs
 //
 export const generateSow = (state: any) =>
-  API.post("/sow/generate", {
-    state,
-  }).then((res) => res.data);
+  API.post("/sow/generate", { state, }).then((res) => res.data);
 
 export const exportSow = (
   sow: string,
@@ -42,49 +34,31 @@ export const exportSow = (
 // Template APIs
 //
 export const getTemplates = () =>
-  API.get("/template/list").then(
-    (res) => res.data
-  );
+  API.get("/template/list").then( (res) => res.data);
 
-export const uploadTemplate = (
-  formData: FormData
-) =>
-  API.post("/template/upload", formData).then(
-    (res) => res.data
-  );
+export const uploadTemplate = ( formData: FormData ) =>
+  API.post("/template/upload", formData).then((res) => res.data);
 
 export const deleteTemplate = (id: string) =>
-  API.delete(`/template/${id}`).then(
-    (res) => res.data
-  );
+  API.delete(`/template/${id}`).then((res) => res.data);
 
 //
 // Knowledge Base APIs
 //
 export const getDocuments = () =>
-  API.get("/ingest/documents").then(
-    (res) => res.data
-  );
+  API.get("/ingest/documents").then((res) => res.data);
 
-export const uploadDocument = (
-  formData: FormData
-) =>
-  API.post("/ingest/document", formData).then(
-    (res) => res.data
-  );
+export const uploadDocument = (formData: FormData) =>
+  API.post("/ingest/document", formData).then((res) => res.data);
 
 export const deleteDocument = (id: string) =>
-  API.delete(`/ingest/document/${id}`).then(
-    (res) => res.data
-  );
+  API.delete(`/ingest/document/${id}`).then((res) => res.data);
 
 //
 // Historical SOW APIs
 //
 export const getHistoricalSows = () =>
-  API.get("/sow-history/list").then(
-    (res) => res.data
-  );
+  API.get("/sow-history/list").then((res) => res.data);
 
 export async function getHistoricalSowRisks(id: string | number) {
   const res = await fetch(`${API_BASE}/sow-history/${id}/risks`);
@@ -96,45 +70,26 @@ export async function getHistoricalSowRisks(id: string | number) {
   return res.json();
 }
 
-export const uploadHistoricalSow = (
-  formData: FormData
-) =>
-  API.post("/sow-history/upload", formData).then(
-    (res) => res.data
-  );
+export const uploadHistoricalSow = (formData: FormData) =>
+  API.post("/sow-history/upload", formData).then((res) => res.data);
 
 export const deleteHistoricalSow = (id: string) =>
-  API.delete(`/sow-history/${id}`).then(
-    (res) => res.data
-  );
+  API.delete(`/sow-history/${id}`).then((res) => res.data);
 
 //
 // Transcript APIs
 //
-export const uploadTranscript = (
-  formData: FormData
-) =>
-  API.post(
-    "/transcript/upload",
-    formData
-  ).then((res) => res.data);
+export const uploadTranscript = (formData: FormData) =>
+  API.post("/transcript/upload", formData).then((res) => res.data);
 
-export const ingestTranscriptText = (
-  text: string
-) =>
-  API.post("/transcript/text", {
-    text,
-  }).then((res) => res.data);
+export const ingestTranscriptText = (text: string) =>
+  API.post("/transcript/text", {text,}).then((res) => res.data);
 
 //
 // Search APIs
 //
-export const searchDocuments = (
-  query: string
-) =>
-  API.get("/search", {
-    params: { query },
-  }).then((res) => res.data);
+export const searchDocuments = (query: string) =>
+  API.get("/search", {params: { query },}).then((res) => res.data);
 
 export default API;
 
@@ -226,3 +181,59 @@ export const compareVersions = (sowId: number, v1: number, v2: number) =>
 
 export const runVersionReview = (payload: { sow_id: number; version: number; mode?: "current" | "new";}) => 
   API.post("/approval/sows/" + payload.sow_id + "/version/" + payload.version + "/run-review", payload).then((res) => res.data);
+
+//
+// Email APIs
+//
+export async function emailSow(
+  sow: string,
+  format: string,
+  recipientEmail: string,
+  templateId?: string,
+  state?: any,
+  transcript?: string,
+  sowId?: number,
+  version?: number,
+  senderName?: string,
+  customMessage?: string
+) {
+  const payload: any = { sow, format, recipient_email: recipientEmail,};
+
+  if (templateId) payload.template_id = templateId;
+  if (state) payload.state = state;
+  if (transcript) payload.transcript = transcript;
+  if (sowId) payload.sow_id = sowId;
+  if (version) payload.version = version;
+  if (senderName) payload.sender_name = senderName;
+  if (customMessage) payload.custom_message = customMessage;
+
+  const response = await fetch(`${API_BASE}/sow/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to send email");
+  }
+  return response.json();
+}
+
+//
+// Delivery APIs
+//
+export const getDeliveryArtifacts = (sowId: number) =>
+  API.get(`/delivery/${sowId}/artifacts`).then((res) => res.data);
+
+export const getDeliveryArtifact = (sowId: number, artifactType: string) =>
+  API.get(`/delivery/${sowId}/artifact/${artifactType}`).then((res) => res.data);
+
+export const generateDeliveryArtifact = (sowId: number, artifactType: string) =>
+  API.post("/delivery/generate", { sow_id: sowId, artifact_type: artifactType }).then((res) => res.data);
+
+export const generateAllDeliveryArtifacts = (sowId: number) =>
+  API.post("/delivery/generate-all", { sow_id: sowId }).then((res) => res.data);
+
+export const pushToJira = (sowId: number) =>
+  API.post(`/delivery/${sowId}/push-jira`).then((res) => res.data);

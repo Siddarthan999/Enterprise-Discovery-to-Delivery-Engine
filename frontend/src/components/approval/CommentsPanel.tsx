@@ -1,15 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  MessageSquare,
-  Send,
-  Trash2,
-  Bot,
-  Square,
-  CheckSquare,
-  Loader2,
-} from "lucide-react";
+import { MessageSquare, Send, Trash2, Bot, Square, CheckSquare, Loader2, } from "lucide-react";
 
 import {
   addApprovalComment,

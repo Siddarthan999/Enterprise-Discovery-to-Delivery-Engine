@@ -29,7 +29,9 @@ _FONT_SUBSTITUTES = {
 _GENERIC_FALLBACK_SERIF = "Liberation Serif"
 _GENERIC_FALLBACK_SANS = "Liberation Sans"
 _SOW_BODY_PLACEHOLDER = "{{SOW_CONTENT}}"
-
+_BULLET_LINE_RE = re.compile(r"^[-\u25cf]\s+")
+_BULLET_ABSTRACT_NUM_ID = "9001"
+_BULLET_NUM_ID = "9001"
 
 def _get_installed_font_names() -> set:
     global _INSTALLED_FONTS_CACHE
@@ -582,6 +584,88 @@ def _insert_table_after(doc: Document, anchor: Paragraph, table_lines: list[str]
     table._tbl.addnext(spacer._p)
     return spacer
 
+# ----------------------------
+# NATIVE BULLET-LIST NUMBERING
+# ----------------------------
+def _ensure_bullet_numbering(doc: Document) -> str:
+
+    numbering_part = doc.part.numbering_part
+    numbering_el = numbering_part.element
+
+    for num_el in numbering_el.findall(qn("w:num")):
+        if num_el.get(qn("w:numId")) == _BULLET_NUM_ID:
+            return _BULLET_NUM_ID
+
+    abstract_num = OxmlElement("w:abstractNum")
+    abstract_num.set(qn("w:abstractNumId"), _BULLET_ABSTRACT_NUM_ID)
+
+    lvl = OxmlElement("w:lvl")
+    lvl.set(qn("w:ilvl"), "0")
+
+    start = OxmlElement("w:start")
+    start.set(qn("w:val"), "1")
+    lvl.append(start)
+
+    num_fmt = OxmlElement("w:numFmt")
+    num_fmt.set(qn("w:val"), "bullet")
+    lvl.append(num_fmt)
+
+    lvl_text = OxmlElement("w:lvlText")
+    lvl_text.set(qn("w:val"), "\uf0b7")  # solid round bullet, Symbol font codepoint
+    lvl.append(lvl_text)
+
+    lvl_jc = OxmlElement("w:lvlJc")
+    lvl_jc.set(qn("w:val"), "left")
+    lvl.append(lvl_jc)
+
+    lvl_p_pr = OxmlElement("w:pPr")
+    ind = OxmlElement("w:ind")
+    ind.set(qn("w:left"), "432")
+    ind.set(qn("w:hanging"), "432")
+    lvl_p_pr.append(ind)
+    lvl.append(lvl_p_pr)
+
+    lvl_r_pr = OxmlElement("w:rPr")
+    r_fonts = OxmlElement("w:rFonts")
+    r_fonts.set(qn("w:ascii"), "Symbol")
+    r_fonts.set(qn("w:hAnsi"), "Symbol")
+    r_fonts.set(qn("w:hint"), "default")
+    lvl_r_pr.append(r_fonts)
+    lvl.append(lvl_r_pr)
+
+    abstract_num.append(lvl)
+
+    first_num = numbering_el.find(qn("w:num"))
+    if first_num is not None:
+        first_num.addprevious(abstract_num)
+    else:
+        numbering_el.append(abstract_num)
+
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), _BULLET_NUM_ID)
+    abstract_num_id_ref = OxmlElement("w:abstractNumId")
+    abstract_num_id_ref.set(qn("w:val"), _BULLET_ABSTRACT_NUM_ID)
+    num.append(abstract_num_id_ref)
+    numbering_el.append(num)
+
+    return _BULLET_NUM_ID
+
+
+def _apply_bullet_numbering(paragraph, num_id: str):
+    p_pr = paragraph._p.get_or_add_pPr()
+
+    existing = p_pr.find(qn("w:numPr"))
+    if existing is not None:
+        p_pr.remove(existing)
+
+    num_pr = OxmlElement("w:numPr")
+    ilvl = OxmlElement("w:ilvl")
+    ilvl.set(qn("w:val"), "0")
+    num_pr.append(ilvl)
+    num_id_el = OxmlElement("w:numId")
+    num_id_el.set(qn("w:val"), num_id)
+    num_pr.append(num_id_el)
+    p_pr.append(num_pr)
 
 # ----------------------------
 # ADD CONTENT TO DOCX
@@ -656,6 +740,16 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
             p = _insert_paragraph_after(current, "", style=styles["bullet"])
             if not styles["_has_native_bullet"]:
                 text = f"• {text}"
+            _add_inline_runs(p, text)
+            current = p
+            i += 1
+            continue
+
+        if _BULLET_LINE_RE.match(line):
+            text = _BULLET_LINE_RE.sub("", line).strip()
+            p = _insert_paragraph_after(current, "", style=styles["bullet"])
+            bullet_num_id = _ensure_bullet_numbering(doc)
+            _apply_bullet_numbering(p, bullet_num_id)
             _add_inline_runs(p, text)
             current = p
             i += 1
