@@ -7,6 +7,8 @@ import ReviewPanel from "../sow/ReviewPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useState, useEffect, useRef } from "react";
+import { Mail } from "lucide-react";
+import { emailSow } from "@/lib/api";
 
 type Props = {
   loading: boolean;
@@ -75,6 +77,27 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const [exporting, setExporting] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [runningReview, setRunningReview] = useState(false);
+
+  const [emailMenuOpen, setEmailMenuOpen] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const emailMenuRef = useRef<HTMLDivElement>(null);
+
+  // --- Email state ---
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        emailMenuRef.current &&
+        !emailMenuRef.current.contains(e.target as Node)
+      ) {
+        setEmailMenuOpen(false);
+      }
+    }
+    window.document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      window.document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setMarkdown(version?.markdown ?? "");
@@ -171,6 +194,39 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
         </p>
       </div>
     );
+  }
+
+    // Add email handler function
+  async function handleEmail(format: string) {
+    if (!emailRecipient || !emailRecipient.includes("@")) {
+      alert("Please enter a valid email address");
+      return;
+    }
+
+    setEmailing(true);
+    try {
+      await emailSow(
+        markdown,
+        format,
+        emailRecipient,
+        exportTemplateId || undefined,
+        null,
+        null,
+        document.id,
+        version.version,
+        viewerRole,
+        emailMessage || undefined
+      );
+
+      alert(`SOW successfully sent to ${emailRecipient}`);
+      setEmailMenuOpen(false);
+      setEmailRecipient("");
+      setEmailMessage("");
+    } catch (error: any) {
+      alert(`Failed to send email: ${error.message}`);
+    } finally {
+      setEmailing(false);
+    }
   }
 
   const canApprove = viewerRole === document.current_stage && document.status !== "Approved";
@@ -513,6 +569,92 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
                           </button>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* EMAIL*/}
+              <div className="relative" ref={emailMenuRef}>
+                <button
+                  onClick={() => setEmailMenuOpen((v) => !v)}
+                  title={`Email Version ${version.version}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#c90c61] px-2.5 py-1.5 text-xs font-medium transition hover:bg-[#a70a4d]"
+                >
+                  {emailing ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Mail size={15} />
+                  )}
+                </button>
+
+                {emailMenuOpen && (
+                  <div className="absolute bottom-full right-0 z-50 mb-2 w-80 rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-2xl">
+                    <p className="pb-3 text-sm font-semibold text-white">
+                      Email Version {version.version}
+                    </p>
+
+                    {templates.length > 0 && (
+                      <div className="mb-3">
+                        <label className="mb-1 block text-xs text-zinc-400">Template</label>
+                        <select
+                          value={exportTemplateId}
+                          onChange={(e) => setExportTemplateId(e.target.value)}
+                          className="w-full rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none"
+                        >
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="mb-3">
+                      <label className="mb-1 block text-xs text-zinc-400">
+                        Recipient Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={emailRecipient}
+                        onChange={(e) => setEmailRecipient(e.target.value)}
+                        placeholder="recipient@example.com"
+                        className="w-full rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="mb-1 block text-xs text-zinc-400">
+                        Custom Message (Optional)
+                      </label>
+                      <textarea
+                        value={emailMessage}
+                        onChange={(e) => setEmailMessage(e.target.value)}
+                        placeholder="Add a personal message..."
+                        rows={3}
+                        className="w-full rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="mb-1 block text-xs text-zinc-400">Format</label>
+                      <div className="flex flex-col gap-1">
+                        {EXPORT_FORMATS.map((f) => {
+                          const Icon = f.icon;
+                          return (
+                            <button
+                              key={f.id}
+                              onClick={() => handleEmail(f.id)}
+                              disabled={emailing}
+                              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
+                            >
+                              <Icon size={14} />
+                              {f.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}

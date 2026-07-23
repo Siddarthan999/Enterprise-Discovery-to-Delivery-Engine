@@ -159,3 +159,20 @@ def init_db():
         ALTER TABLE sow_comments
         ADD COLUMN IF NOT EXISTS end_offset INT
         """))
+
+                # ---------------- DELIVERY ARTIFACTS ----------------
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS delivery_artifacts (
+            id SERIAL PRIMARY KEY,
+            sow_id INT NOT NULL REFERENCES sow_documents(id) ON DELETE CASCADE,
+            version INT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Not Generated',
+            content JSONB,
+            jira_project_key TEXT,
+            jira_created BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (sow_id, version, artifact_type)
+        )
+        """))
