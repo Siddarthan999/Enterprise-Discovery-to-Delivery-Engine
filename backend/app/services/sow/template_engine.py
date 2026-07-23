@@ -30,6 +30,24 @@ _GENERIC_FALLBACK_SERIF = "Liberation Serif"
 _GENERIC_FALLBACK_SANS = "Liberation Sans"
 _SOW_BODY_PLACEHOLDER = "{{SOW_CONTENT}}"
 
+# Bullet-line detection: matches lines that start with either a markdown
+# "- " dash OR the "●" glyph that sow.py's BULLET constant emits
+# (workstream bullets, scope_summary_bullets, obligation_bullets all use
+# "\u25cf "). Previously only "- " was recognized here, so "● " lines fell
+# through to the plain body-paragraph branch and rendered as literal dot
+# characters glued to text instead of real Word bullet-list items.
+_BULLET_LINE_RE = re.compile(r"^[-\u25cf]\s+")
+
+# Fixed numId used for the bullet list we inject. Many destination
+# templates (including the real SOW template) do NOT ship a built-in
+# "List Bullet" style, so relying on paragraph-style inheritance for
+# bullet formatting silently degrades to "no real bullet at all" on those
+# templates. Defining our own numbering part entry guarantees a genuine
+# Word bulleted list (proper marker + hanging indent) regardless of what
+# styles the destination template happens to define.
+_BULLET_ABSTRACT_NUM_ID = "9001"
+_BULLET_NUM_ID = "9001"
+
 
 def _get_installed_font_names() -> set:
     global _INSTALLED_FONTS_CACHE
@@ -584,6 +602,112 @@ def _insert_table_after(doc: Document, anchor: Paragraph, table_lines: list[str]
 
 
 # ----------------------------
+# NATIVE BULLET-LIST NUMBERING
+# ----------------------------
+def _ensure_bullet_numbering(doc: Document) -> str:
+    """Ensure a numbering definition for a real bulleted list exists in
+    this document's numbering part, and return the numId to apply via
+    w:numPr on each bullet paragraph.
+
+    This does NOT depend on the destination template defining a "List
+    Bullet" style. Some templates don't ship one at all (confirmed on the
+    real SOW template), in which case falling back to paragraph-style
+    inheritance produces no bullet formatting whatsoever. Writing the
+    numbering definition directly guarantees a genuine Word bullet marker
+    + hanging indent on every template.
+
+    Idempotent: safe to call once per bullet paragraph; reuses the same
+    numId after the first call for a given document.
+    """
+    numbering_part = doc.part.numbering_part
+    numbering_el = numbering_part.element
+
+    for num_el in numbering_el.findall(qn("w:num")):
+        if num_el.get(qn("w:numId")) == _BULLET_NUM_ID:
+            return _BULLET_NUM_ID
+
+    abstract_num = OxmlElement("w:abstractNum")
+    abstract_num.set(qn("w:abstractNumId"), _BULLET_ABSTRACT_NUM_ID)
+
+    lvl = OxmlElement("w:lvl")
+    lvl.set(qn("w:ilvl"), "0")
+
+    start = OxmlElement("w:start")
+    start.set(qn("w:val"), "1")
+    lvl.append(start)
+
+    num_fmt = OxmlElement("w:numFmt")
+    num_fmt.set(qn("w:val"), "bullet")
+    lvl.append(num_fmt)
+
+    lvl_text = OxmlElement("w:lvlText")
+    lvl_text.set(qn("w:val"), "\uf0b7")  # solid round bullet, Symbol font codepoint
+    lvl.append(lvl_text)
+
+    lvl_jc = OxmlElement("w:lvlJc")
+    lvl_jc.set(qn("w:val"), "left")
+    lvl.append(lvl_jc)
+
+    lvl_p_pr = OxmlElement("w:pPr")
+    ind = OxmlElement("w:ind")
+    ind.set(qn("w:left"), "432")
+    ind.set(qn("w:hanging"), "432")
+    lvl_p_pr.append(ind)
+    lvl.append(lvl_p_pr)
+
+    lvl_r_pr = OxmlElement("w:rPr")
+    r_fonts = OxmlElement("w:rFonts")
+    r_fonts.set(qn("w:ascii"), "Symbol")
+    r_fonts.set(qn("w:hAnsi"), "Symbol")
+    r_fonts.set(qn("w:hint"), "default")
+    lvl_r_pr.append(r_fonts)
+    lvl.append(lvl_r_pr)
+
+    abstract_num.append(lvl)
+
+    # abstractNum elements must precede num elements per the numbering.xml
+    # schema's required element order.
+    first_num = numbering_el.find(qn("w:num"))
+    if first_num is not None:
+        first_num.addprevious(abstract_num)
+    else:
+        numbering_el.append(abstract_num)
+
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), _BULLET_NUM_ID)
+    abstract_num_id_ref = OxmlElement("w:abstractNumId")
+    abstract_num_id_ref.set(qn("w:val"), _BULLET_ABSTRACT_NUM_ID)
+    num.append(abstract_num_id_ref)
+    numbering_el.append(num)
+
+    return _BULLET_NUM_ID
+
+
+def _apply_bullet_numbering(paragraph, num_id: str):
+    """Attach w:numPr (ilvl=0, the given numId) to a paragraph's pPr so
+    Word renders a genuine bulleted-list marker for it, rather than a
+    plain-text character sitting in front of the paragraph."""
+    p_pr = paragraph._p.get_or_add_pPr()
+
+    existing = p_pr.find(qn("w:numPr"))
+    if existing is not None:
+        p_pr.remove(existing)
+
+    num_pr = OxmlElement("w:numPr")
+    ilvl = OxmlElement("w:ilvl")
+    ilvl.set(qn("w:val"), "0")
+    num_pr.append(ilvl)
+    num_id_el = OxmlElement("w:numId")
+    num_id_el.set(qn("w:val"), num_id)
+    num_pr.append(num_id_el)
+
+    # w:numPr must come after w:pStyle (if present) per schema order; both
+    # of our call sites only ever have pStyle already set at this point,
+    # so appending is always schema-correct here.
+    p_pr.append(num_pr)
+
+
+# ----------------------------
 # ADD CONTENT TO DOCX
 # ----------------------------
 def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
@@ -651,11 +775,25 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
             i += 1
             continue
 
-        if line.startswith("- "):
-            text = line[2:].strip()
+        # Bullet lines: recognizes both a markdown "- " dash and the "●"
+        # glyph emitted by sow.py's BULLET constant. Previously this only
+        # checked for "- ", so "● " lines (which is what sow.py actually
+        # produces) fell through to the plain body-paragraph branch below
+        # and rendered as a literal "●" character glued to plain text
+        # instead of a real Word bulleted list item.
+        #
+        # The stripped "●"/"-" marker is discarded entirely (not replaced
+        # with a "• " prefix): real bullet-list numbering is attached via
+        # _apply_bullet_numbering() below, which renders Word's own bullet
+        # marker natively. This also works on templates that don't define
+        # a "List Bullet" style at all -- confirmed to be the case for the
+        # real SOW template, where the old style-inheritance-only approach
+        # silently produced no bullet formatting.
+        if _BULLET_LINE_RE.match(line):
+            text = _BULLET_LINE_RE.sub("", line).strip()
             p = _insert_paragraph_after(current, "", style=styles["bullet"])
-            if not styles["_has_native_bullet"]:
-                text = f"• {text}"
+            bullet_num_id = _ensure_bullet_numbering(doc)
+            _apply_bullet_numbering(p, bullet_num_id)
             _add_inline_runs(p, text)
             current = p
             i += 1
