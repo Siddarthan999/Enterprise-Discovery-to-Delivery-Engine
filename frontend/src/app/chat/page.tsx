@@ -132,13 +132,21 @@ export default function ChatPage() {
       <AppNav />
       <div className="mx-auto flex h-[calc(100vh-88px)] max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/20">
-          <h1 className="text-2xl font-semibold text-white">
-            Enterprise Copilot
-          </h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
+              <Bot size={20} />
+            </div>
 
-          <p className="mt-1 text-sm text-zinc-400">
-            Chat with your enterprise knowledge base in one unified workspace.
-          </p>
+            <div>
+              <h1 className="text-2xl font-semibold text-white">
+                Enterprise Copilot
+              </h1>
+
+              <p className="mt-0.5 text-sm text-zinc-400">
+                Chat with your enterprise knowledge base in one unified workspace.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="dark-scrollbar flex-1 overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/80 p-5 shadow-2xl shadow-black/20 space-y-5">
