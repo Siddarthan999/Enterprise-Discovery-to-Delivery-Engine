@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FileText, Sparkles, Download, ChevronRight, Layers, Plus, Trash2, Check, X} from "lucide-react";
+import { FileText, Sparkles, Download, ChevronRight, FilePenLine, Plus, Trash2, Check, X, } from "lucide-react";
 import TranscriptPanel from "@/components/sow/TranscriptPanel";
 import DiscoveryPanel from "@/components/sow/DiscoveryPanel";
 import SowViewer from "@/components/sow/SowViewer";
@@ -99,7 +99,7 @@ export default function SOWPage() {
             {/* Left side */}
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
-                <Layers size={20} />
+                <FilePenLine size={20} />
               </div>
 
               <div>

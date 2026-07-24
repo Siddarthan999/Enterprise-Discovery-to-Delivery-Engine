@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppNav from "@/components/layout/AppNav";
+import { Database } from "lucide-react";
 import {
   API_BASE,
   getTemplates,
@@ -207,10 +208,21 @@ export default function ResourcesPage() {
 
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/20">
-          <h1 className="text-2xl font-semibold text-white">Resources</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Manage SOW templates, knowledge base documents, and historical SOWs.
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
+              <Database size={20} />
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-semibold text-white">
+                Resources
+              </h1>
+
+              <p className="mt-0.5 text-sm text-zinc-400">
+                Manage SOW templates, knowledge base documents, and historical SOWs.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
