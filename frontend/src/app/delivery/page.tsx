@@ -165,7 +165,7 @@ export default function DeliveryPage() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.12),_transparent_45%),_linear-gradient(135deg,_#050816_0%,_#0b1120_45%,_#020617_100%)] text-white">
       <AppNav />
 
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
 
         <DeliveryHeader />
 

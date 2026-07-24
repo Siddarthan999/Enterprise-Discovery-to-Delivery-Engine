@@ -1,6 +1,7 @@
 "use client";
 
 import { searchDocuments } from "@/lib/api";
+import { Search } from "lucide-react";
 import KnowledgeGraph from "@/components/graph/KnowledgeGraph";
 import AppNav from "@/components/layout/AppNav";
 import { useState } from "react";
@@ -44,13 +45,21 @@ export default function SearchPage() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/20">
-          <h1 className="text-2xl font-semibold text-white">
-            Enterprise Search
-          </h1>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
+              <Search size={20} />
+            </div>
 
-          <p className="mt-1 text-sm text-zinc-400">
-            Hybrid retrieval (Vector + Graph) across your knowledge base.
-          </p>
+            <div>
+              <h1 className="text-2xl font-semibold text-white">
+                Enterprise Search
+              </h1>
+
+              <p className="mt-0.5 text-sm text-zinc-400">
+                Hybrid retrieval (Vector + Graph) across your knowledge base.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Search Bar */}
