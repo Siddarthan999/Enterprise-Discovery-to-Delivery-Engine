@@ -63,6 +63,10 @@ class RunReviewRequest(BaseModel):
     version: int
     mode: str = "current"   # "current" or "new"
 
+class UnapproveRequest(BaseModel):
+    sow_id: int
+    reviewer_role: str
+
 def _json_load_maybe(value):
     if value is None:
         return None
@@ -274,60 +278,111 @@ def add_comment(req:CommentRequest):
     return {"success":True}
 
 @router.post("/approve")
-def approve(req:ApproveRequest):
-
+def approve(req: ApproveRequest):
     with engine.begin() as conn:
-
-        row=conn.execute(text("""
-            SELECT current_stage
+        row = conn.execute(text("""
+            SELECT approvals, status
             FROM sow_documents
             WHERE id=:id
-        """),{"id":req.sow_id}).first()
+        """), {"id": req.sow_id}).first()
 
         if not row:
-            return {"error":"Not found"}
+            return {"error": "Not found"}
 
-        current=row[0]
+        approvals = row[0] or {}
+        status = row[1]
 
-        if current!=req.reviewer_role:
-            return {"error":"Not your stage"}
-
-        if current not in APPROVAL_FLOW:
+        if req.reviewer_role not in APPROVAL_FLOW:
             return {"error": "Invalid approval stage"}
 
-        index = APPROVAL_FLOW.index(current)
+        if status == "Approved":
+            return {"error": "Already approved"}
 
-        if index==len(APPROVAL_FLOW)-1:
+        if approvals.get(req.reviewer_role):
+            return {"error": "Already approved by this role"}
 
+        approvals[req.reviewer_role] = True
+        all_approved = all(approvals.get(role) for role in APPROVAL_FLOW)
+
+        if all_approved:
             conn.execute(text("""
                 UPDATE sow_documents
-                SET
+                SET approvals=:approvals,
                     status='Approved',
                     updated_at=NOW()
                 WHERE id=:id
-            """),{"id":req.sow_id})
-
-            return {"status":"Approved"}
-
-        next_stage=APPROVAL_FLOW[index+1]
+            """), {
+                "approvals": json.dumps(approvals),
+                "id": req.sow_id,
+            })
+            return {"status": "Approved"}
 
         conn.execute(text("""
             UPDATE sow_documents
-            SET
-                current_stage=:stage,
+            SET approvals=:approvals,
                 status='Pending',
                 updated_at=NOW()
             WHERE id=:id
-        """),{
-
-            "stage":next_stage,
-            "id":req.sow_id
-
+        """), {
+            "approvals": json.dumps(approvals),
+            "id": req.sow_id,
         })
 
-    return {
-        "next_stage":next_stage
-    }
+        return {"status": "Pending"}
+
+@router.post("/unapprove")
+def unapprove(req: UnapproveRequest):
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            SELECT approvals
+            FROM sow_documents
+            WHERE id=:id
+        """), {"id": req.sow_id}).first()
+
+        if not row:
+            return {"error": "Not found"}
+
+        approvals = row[0] or {}
+
+        if not approvals.get(req.reviewer_role):
+            return {"error": "Reviewer has not approved"}
+
+        approvals.pop(req.reviewer_role, None)
+
+        # Find latest approved stage
+        approved_roles = [
+            role for role in APPROVAL_FLOW
+            if approvals.get(role)
+        ]
+
+        if approved_roles:
+            last_role = approved_roles[-1]
+            next_index = APPROVAL_FLOW.index(last_role) + 1
+
+            if next_index < len(APPROVAL_FLOW):
+                stage = APPROVAL_FLOW[next_index]
+            else:
+                stage = "Completed"
+        else:
+            stage = APPROVAL_FLOW[0]
+
+        conn.execute(text("""
+            UPDATE sow_documents
+            SET approvals=:approvals,
+                status='Pending',
+                current_stage=:stage,
+                updated_at=NOW()
+            WHERE id=:id
+        """), {
+            "approvals": json.dumps(approvals),
+            "stage": stage,
+            "id": req.sow_id,
+        })
+
+        return {
+            "status": "Pending",
+            "approvals": approvals
+        }
 
 @router.post("/request-changes")
 def request_changes(req: RequestChangesRequest):

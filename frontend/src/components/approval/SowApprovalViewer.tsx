@@ -1,7 +1,7 @@
 "use client";
 
 import { Clock3, FileText, User, MessageSquarePlus, Pencil, Save, X, Check, Loader2, GitCompare, Download, FileType, FileCode, ChevronDown, Bot, Sparkles, Play,  } from "lucide-react";
-import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle, getTemplates, exportSow, runVersionReview } from "@/lib/api";
+import { addApprovalComment, approveSow, updateSowVersion, updateSowTitle, getTemplates, exportSow, runVersionReview, unapproveSow, } from "@/lib/api";
 import CommentsPanel from "./CommentsPanel";
 import ReviewPanel from "../sow/ReviewPanel";
 import ReactMarkdown from "react-markdown";
@@ -65,6 +65,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const [postingComment, setPostingComment] = useState(false);
 
   const [approving, setApproving] = useState(false);
+  const [hoveringApprove, setHoveringApprove] = useState(false);
   const [showReview, setShowReview] = useState(false);
 
   const compareContainerRef = useRef<HTMLDivElement | null>(null);
@@ -83,6 +84,8 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
   const [emailRecipient, setEmailRecipient] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
   const emailMenuRef = useRef<HTMLDivElement>(null);
+
+  const APPROVAL_FLOW = [ "Architect", "Practice Lead", "Legal", "CFO", "Client", ];
 
   // --- Email state ---
   useEffect(() => {
@@ -229,12 +232,28 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
     }
   }
 
-  const canApprove = viewerRole === document.current_stage && document.status !== "Approved";
+  const approvals = document?.approvals ?? {};
+  const hasApproved = !!approvals[viewerRole];
+  const canApprove = APPROVAL_FLOW.includes(viewerRole) && document.status !== "Approved" && !approvals[viewerRole];
 
   async function handleApprove() {
     setApproving(true);
     try {
       await approveSow({
+        sow_id: document.id,
+        reviewer_role: viewerRole,
+      });
+
+      await refresh();
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleUnapprove() {
+    setApproving(true);
+    try {
+      await unapproveSow({
         sow_id: document.id,
         reviewer_role: viewerRole,
       });
@@ -691,17 +710,39 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
               )}
 
               <button
-                  onClick={handleApprove}
-                  disabled={!canApprove || approving}
-                  title={canApprove ? "Approve this SOW" : "Not your turn to approve"}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-medium transition hover:bg-emerald-500 disabled:opacity-40"
+                onClick={hasApproved ? handleUnapprove : handleApprove}
+                disabled={approving}
+                onMouseEnter={() => setHoveringApprove(true)}
+                onMouseLeave={() => setHoveringApprove(false)}
+                title={
+                  hasApproved
+                    ? "Revoke your approval"
+                    : canApprove
+                    ? "Approve this SOW"
+                    : "Waiting for your approval stage"
+                }
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-200
+                ${
+                  hasApproved
+                    ? "bg-emerald-500/40 text-white/40 hover:bg-red-600 hover:text-white"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                }
+                ${approving ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+                `}
               >
-                  {approving ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Check size={13} />
-                  )}
-                  Approve
+                {approving ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : hasApproved ? (
+                  hoveringApprove ? <X size={13} /> : <Check size={13} />
+                ) : (
+                  <Check size={13} />
+                )}
+
+                {hasApproved
+                  ? hoveringApprove
+                    ? "Unapprove"
+                    : "Approved"
+                  : "Approve"}
               </button>
             </div>
           </div>
@@ -716,6 +757,7 @@ export default function SowApprovalViewer({loading, viewerRole, sow, comments, r
             version={document.current_version}
             viewerRole={viewerRole}
             currentStage={document.current_stage}
+            approvals={document.approvals ?? {}}
             comments={comments}
             refresh={refresh}
           />

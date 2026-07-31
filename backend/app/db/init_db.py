@@ -101,6 +101,11 @@ def init_db():
         );
         """))
 
+        conn.execute(text("""
+            ALTER TABLE sow_documents
+            ADD COLUMN IF NOT EXISTS approvals JSONB DEFAULT '{}'::jsonb;
+        """))
+
         # ---------------- SOW VERSIONS ----------------
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS sow_versions (
