@@ -3,17 +3,14 @@
 import { useState } from "react";
 import { MessageSquare, Send, Trash2, Bot, Square, CheckSquare, Loader2, } from "lucide-react";
 
-import {
-  addApprovalComment,
-  deleteComment,
-  requestChanges,
-} from "@/lib/api";
+import { addApprovalComment, deleteComment, requestChanges, } from "@/lib/api";
 
 type Props = {
   sowId: number;
   version: number;
   viewerRole: string;
   currentStage: string;
+  approvals?: Record<string, boolean>;
   comments: any[];
   refresh: () => Promise<void>;
 };
@@ -23,6 +20,7 @@ export default function CommentsPanel({
   version,
   viewerRole,
   currentStage,
+  approvals = {},
   comments,
   refresh,
 }: Props) {
@@ -33,7 +31,7 @@ export default function CommentsPanel({
   const [selected, setSelected] = useState<number[]>([]);
   const [runningAI, setRunningAI] = useState(false);
 
-  const canComment = viewerRole === currentStage;
+  const canComment = ["Architect", "Practice Lead", "Legal", "CFO", "Client"].includes(viewerRole) && !approvals[viewerRole];
 
   async function submit() {
     if (!section.trim() || !comment.trim()) return;
@@ -222,7 +220,7 @@ export default function CommentsPanel({
           placeholder={
             canComment
               ? "Leave a review comment..."
-              : `Waiting for ${currentStage}`
+              : `You have already approved`
           }
           className="w-full resize-none rounded-lg border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-xs outline-none focus:border-cyan-500 disabled:opacity-50"
         />

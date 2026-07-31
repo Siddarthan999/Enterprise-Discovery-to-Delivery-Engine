@@ -152,6 +152,9 @@ export const addApprovalComment = (payload: any) =>
 export const approveSow = (payload: any) =>
   API.post("/approval/approve", payload).then((res) => res.data);
 
+export const unapproveSow = (payload: any) =>
+  API.post("/approval/unapprove", payload).then((res) => res.data);
+
 export const requestChanges=(payload:any)=>
   API.post("/approval/request-changes", payload).then(res=>res.data);
 

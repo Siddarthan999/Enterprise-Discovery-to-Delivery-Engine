@@ -212,9 +212,8 @@ export default function ApprovalPage() {
     await loadSows();
   }
 
-  const currentStage: string | undefined = selectedSow?.document?.current_stage;
   const documentStatus: string | undefined = selectedSow?.document?.status;
-  const currentStageIndex = currentStage ? ROLES.indexOf(currentStage) : -1;
+  const approvals = selectedSow?.document?.approvals ?? {};
   const isFullyApproved = documentStatus === "Approved";
 
   const canRunCompare = compareFrom != null && compareTo != null && compareFrom !== compareTo;
@@ -286,8 +285,8 @@ export default function ApprovalPage() {
           {selectedSow && (
             <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
               {ROLES.map((role, i) => {
-                const isDone = isFullyApproved || i < currentStageIndex;
-                const isActive = !isFullyApproved && i === currentStageIndex;
+                const isDone = Boolean(approvals[role]) || isFullyApproved;
+                const isActive = !isDone && !isFullyApproved;
 
                 return (
                   <div key={role} className="flex flex-1 items-center gap-1">
@@ -296,8 +295,6 @@ export default function ApprovalPage() {
                         className={`flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-medium transition ${
                           isDone
                             ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
-                            : isActive
-                            ? "border-[#c90c61]/50 bg-[#c90c61]/15 text-[#c90c61] ring-2 ring-[#c90c61]/20"
                             : "border-white/10 bg-zinc-900 text-zinc-600"
                         }`}
                       >
@@ -305,11 +302,7 @@ export default function ApprovalPage() {
                       </div>
                       <span
                         className={`whitespace-nowrap text-[11px] ${
-                          isActive
-                            ? "font-medium text-white"
-                            : isDone
-                            ? "text-zinc-400"
-                            : "text-zinc-600"
+                          isDone ? "text-zinc-400" : "text-zinc-600"
                         }`}
                       >
                         {role}
