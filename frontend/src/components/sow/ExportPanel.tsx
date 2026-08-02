@@ -3,27 +3,81 @@
 import { useState } from "react";
 import { FileText, FileType, FileCode, Download, Loader2 } from "lucide-react";
 
-const FORMATS = [
+const BASE_FORMATS = [
   { id: "md", label: "Markdown", icon: FileCode },
   { id: "docx", label: "DOCX", icon: FileType },
   { id: "pdf", label: "PDF", icon: FileText },
 ];
 
+type DocMode = "sow" | "proposal";
+
 export default function ExportPanel({
+  mode,
   state,
   sow,
   templateId,
+  templateType,
+  structuredProposal,
   transcript,
 }: {
+  mode: DocMode;
   state: any;
   sow: string;
   templateId: string;
+  templateType?: string;
+  structuredProposal?: any;
   transcript?: string;
 }) {
   const [format, setFormat] = useState("md");
   const [loading, setLoading] = useState(false);
 
+  const isPptxTemplate = templateType === "pptx";
+  const FORMATS =
+    mode === "proposal"
+      ? [...BASE_FORMATS, { id: "pptx", label: "PPTX", icon: FileType }]
+      : BASE_FORMATS;
+
   async function exportFile() {
+    if (format === "pptx") {
+      if (!templateId || !isPptxTemplate) {
+        alert("Select a PPTX/POTX template first.");
+        return;
+      }
+      if (!structuredProposal) {
+        alert("Generate a proposal via Discovery before exporting to PPTX.");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch("http://localhost:8000/api/proposal/export-pptx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            structured_proposal: structuredProposal,
+            template_id: templateId,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "PPTX export failed");
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "proposal.pptx";
+        a.click();
+      } catch (err: any) {
+        alert(err.message || "PPTX export failed");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!state) return;
     setLoading(true);
 
@@ -44,12 +98,14 @@ export default function ExportPanel({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `sow.${format}`;
+      a.download = mode === "proposal" ? `proposal.${format}` : `sow.${format}`;
       a.click();
     } finally {
       setLoading(false);
     }
   }
+
+  const label = mode === "proposal" ? "Proposal" : "SOW";
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -59,7 +115,7 @@ export default function ExportPanel({
             <Download size={16} />
           </div>
           <div>
-            <h2 className="text-lg font-medium">Export SOW</h2>
+            <h2 className="text-lg font-medium">Export {label}</h2>
             <p className="text-xs text-zinc-400">Download the final deliverable</p>
           </div>
         </div>
@@ -70,13 +126,24 @@ export default function ExportPanel({
             {FORMATS.map((f) => {
               const Icon = f.icon;
               const active = format === f.id;
+              const disabled = f.id === "pptx" ? !isPptxTemplate : isPptxTemplate;
               return (
                 <button
                   key={f.id}
-                  onClick={() => setFormat(f.id)}
+                  onClick={() => !disabled && setFormat(f.id)}
+                  disabled={disabled}
+                  title={
+                    disabled
+                      ? f.id === "pptx"
+                        ? "Select a PPTX/POTX template to enable this"
+                        : "A PPTX/POTX template is selected — choose the PPTX format"
+                      : undefined
+                  }
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
                     active
                       ? "bg-white text-black"
+                      : disabled
+                      ? "text-zinc-700 cursor-not-allowed"
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
@@ -104,7 +171,7 @@ export default function ExportPanel({
 
       {!sow && (
         <p className="mt-3 text-xs text-zinc-600">
-          Generate a SOW via Discovery before exporting.
+          Generate a {label} via Discovery before exporting.
         </p>
       )}
     </div>

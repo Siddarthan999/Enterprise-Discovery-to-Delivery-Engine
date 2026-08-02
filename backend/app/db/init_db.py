@@ -181,3 +181,32 @@ def init_db():
             UNIQUE (sow_id, version, artifact_type)
         )
         """))
+
+        # ---------------- PROPOSAL DOCUMENTS ----------------
+        # Mirrors sow_documents/sow_versions but intentionally has NO
+        # review/confidence/historical_* columns — Proposal mode never
+        # invokes the AI reviewer agents.
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS proposal_documents (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            author_id INT REFERENCES sow_authors(id),
+            current_version INT DEFAULT 1,
+            status TEXT DEFAULT 'Draft',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        """))
+        # ---------------- PROPOSAL VERSIONS ----------------
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS proposal_versions (
+            id SERIAL PRIMARY KEY,
+            proposal_id INT REFERENCES proposal_documents(id) ON DELETE CASCADE,
+            version INT NOT NULL,
+            markdown TEXT,
+            created_by TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            source_state_json JSONB,
+            UNIQUE (proposal_id, version)
+        )
+        """))

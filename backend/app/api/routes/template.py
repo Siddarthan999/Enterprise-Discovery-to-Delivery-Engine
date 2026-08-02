@@ -5,18 +5,31 @@ from app.services.sow.template_storage import (
     save_templates
 )
 from app.services.sow.template_parser import extract_sections
+from app.services.sow.template_pptx_parser import extract_pptx_outline
 
 router = APIRouter(tags=["templates"])
+
+ALLOWED_EXTENSIONS = {"docx", "pptx", "potx"}
+PPTX_EXTENSIONS = {"pptx", "potx"}
 
 
 @router.post("/upload")
 async def upload_template(file: UploadFile = File(...)):
+    original_name = file.filename or ""
+    ext = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else ""
+
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported template file type. Upload a .docx, .pptx, or .potx file.",
+        )
 
     content = await file.read()
 
-    template_id, filename, path = store_file(content)
+    template_id, filename, path = store_file(content, ext)
 
-    parsed = extract_sections(path)
+    is_pptx = ext in PPTX_EXTENSIONS
+    parsed = extract_pptx_outline(path) if is_pptx else extract_sections(path)
 
     templates = load_templates()
 
@@ -24,14 +37,17 @@ async def upload_template(file: UploadFile = File(...)):
         "id": template_id,
         "name": file.filename,
         "filename": filename,
-        "sections": parsed["sections"]
+        "type": "pptx" if is_pptx else "docx",
+        "sections": parsed.get("sections", []),
+        "slide_count": parsed.get("slide_count"),
     })
 
     save_templates(templates)
 
     return {
         "id": template_id,
-        "sections": parsed["sections"]
+        "type": "pptx" if is_pptx else "docx",
+        "sections": parsed.get("sections", []),
     }
 
 

@@ -160,8 +160,7 @@ export default function TranscriptPanel({
             </p>
             <p className="text-xs text-zinc-600">
               TXT · PDF · DOCX · PPTX · XLSX · CSV · EML · MD · VTT · JSON — select multiple
-              at once, or upload one at a time; each upload adds to the transcript below
-              rather than replacing it.
+              at once, or upload one at a time.
             </p>
           </label>
 

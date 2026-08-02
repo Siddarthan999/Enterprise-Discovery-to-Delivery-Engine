@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { FileText, Copy, Check } from "lucide-react";
 
-export default function SowViewer({ sow }: { sow: string }) {
+type DocMode = "sow" | "proposal";
+
+export default function SowViewer({ sow, mode }: { sow: string; mode: DocMode }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -22,7 +24,9 @@ export default function SowViewer({ sow }: { sow: string }) {
           <div className="rounded-lg bg-cyan-500/10 p-1.5 text-cyan-400">
             <FileText size={16} />
           </div>
-          <h2 className="text-lg font-medium">SOW Preview</h2>
+          <h2 className="text-lg font-medium">
+            {mode === "sow" ? "SOW Preview" : "Proposal Preview"}
+          </h2>
         </div>
 
         <div className="flex items-center gap-3">
@@ -53,7 +57,7 @@ export default function SowViewer({ sow }: { sow: string }) {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-950/40 p-8 text-center text-sm text-zinc-500">
-            No SOW generated yet. Run discovery first.
+            No {mode === "sow" ? "SOW" : "Proposal"} generated yet. Run discovery first.
           </div>
         )}
       </div>

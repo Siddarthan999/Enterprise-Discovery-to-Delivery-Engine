@@ -46,6 +46,7 @@ To delete all the data's from the DB
 ```
 DELETE FROM document_chunks;
 DELETE FROM documents;
+TRUNCATE TABLE proposal_versions, proposal_documents RESTART IDENTITY;
 ```
 
 ### Ollama

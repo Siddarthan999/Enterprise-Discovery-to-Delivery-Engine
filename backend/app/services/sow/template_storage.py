@@ -20,9 +20,9 @@ def save_templates(templates):
         json.dump(templates, f, indent=2)
 
 
-def store_file(file):
+def store_file(file: bytes, extension: str = "docx"):
     template_id = str(uuid.uuid4())
-    filename = f"{template_id}.docx"
+    filename = f"{template_id}.{extension}"
     path = os.path.join(TEMPLATE_DIR, filename)
 
     with open(path, "wb") as f:

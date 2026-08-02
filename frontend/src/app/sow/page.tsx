@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect } from "react";
 import { FileText, Sparkles, Download, ChevronRight, FilePenLine, Plus, Trash2, Check, X, } from "lucide-react";
 import TranscriptPanel from "@/components/sow/TranscriptPanel";
@@ -16,6 +15,8 @@ type Step = {
   done: boolean;
 };
 
+type DocMode = "sow" | "proposal";
+
 export default function SOWPage() {
   const [transcript, setTranscript] = useState("");
   const [state, setState] = useState<any>(null);
@@ -30,29 +31,65 @@ export default function SOWPage() {
   const [selectedAuthor, setSelectedAuthor] = useState<number | "">("");
   const [newAuthor, setNewAuthor] = useState("");
   const [showNewAuthor, setShowNewAuthor] = useState(false);
+  const [structuredProposal, setStructuredProposal] = useState<any>(null);
+
+  // Toggle between SOW mode (existing behavior) and Proposal mode.
+  // Default is "sow" so existing behavior is unchanged unless the user
+  // explicitly switches.
+  const [mode, setMode] = useState<DocMode>("sow");
 
   useEffect(() => {
     async function loadTemplates() {
       const data = await getTemplates();
       setTemplates(data);
       if (data.length > 0) {
-        setSelectedTemplate(data[0].id);
+        const initial = data.find((t: any) => t.type !== "pptx") ?? data[0];
+        setSelectedTemplate(initial.id);
       }
     }
-
     loadTemplates();
     async function loadAuthors() {
       const data = await getAuthors();
-
       setAuthors(data);
-
       if (data.length > 0) {
         setSelectedAuthor(data[0].id);
       }
     }
-
     loadAuthors();
   }, []);
+
+  function getSelectWidth(text: string) {
+    // ~8px per character + padding + dropdown arrow
+    return `${Math.max(text.length * 8 + 48, 80)}px`;
+  }
+
+  // Switching modes starts a fresh document — mixing a SOW-shaped state
+  // with proposal generation (or vice versa) would silently produce a
+  // broken document, so we reset generated output and go back to the
+  // Discovery step whenever the mode changes.
+  function handleModeChange(next: DocMode) {
+    if (next === mode) return;
+    setMode(next);
+    const available = next === "sow" ? templates.filter((t: any) => t.type !== "pptx") : templates;
+    if (
+      available.length && !available.some((t: any) => String(t.id) === String(selectedTemplate))
+    ) {
+      setSelectedTemplate(available[0].id);
+    }
+    setState(null);
+    setSow("");
+    setReview(null);
+    setConfidence(null);
+    setHistoricalSowsUsed([]);
+    setHistoricalRisksConsidered([]);
+    setStructuredProposal(null);
+  }
+
+  const selectedTemplateObj = templates.find((t: any) => String(t.id) === String(selectedTemplate));
+
+  const selectedAuthorObj = authors.find((a: any) => a.id === selectedAuthor);
+
+  const visibleTemplates = mode === "sow" ? templates.filter((t: any) => t.type !== "pptx") : templates;
 
   const steps: Step[] = [
     { label: "Context", icon: <FileText size={14} />, done: !!transcript },
@@ -95,24 +132,22 @@ export default function SOWPage() {
         {/* Header */}
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-cyan-950/20">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
             {/* Left side */}
             <div className="flex items-center gap-3">
               <div className="rounded-xl bg-[#c90c61]/10 p-2 text-[#c90c61]">
                 <FilePenLine size={20} />
               </div>
-
               <div>
                 <h1 className="text-2xl font-semibold text-white">
-                  SOW Generator
+                  {mode === "sow" ? "SOW Generator" : "Proposal Generator"}
                 </h1>
-
                 <p className="mt-0.5 text-sm text-zinc-400">
-                  Discovery → Structured State → Statement of Work
+                  {mode === "sow"
+                    ? "Discovery → Structured State → Statement of Work"
+                    : "Discovery → Structured State → Proposal"}
                 </p>
               </div>
             </div>
-
             {/* Step Progress - Right side */}
             <div className="flex flex-wrap items-center gap-1.5">
               {steps.map((step, i) => (
@@ -127,7 +162,6 @@ export default function SOWPage() {
                     {step.icon}
                     {step.label}
                   </div>
-
                   {i < steps.length - 1 && (
                     <ChevronRight
                       size={14}
@@ -137,22 +171,20 @@ export default function SOWPage() {
                 </div>
               ))}
             </div>
-
           </div>
         </div>
-
         {/* Template selector */}
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-zinc-900/80 p-4 shadow-lg shadow-black/20">
           <label className="text-sm text-zinc-400">
             Template
           </label>
-
           <select
             value={selectedTemplate}
             onChange={(e) => setSelectedTemplate(e.target.value)}
-            className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
+            style={{ width: getSelectWidth(selectedTemplateObj?.name ?? ""), }}
+            className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white outline-none focus:outline-none focus:ring-0 focus:border-white/10"
           >
-            {templates.map((t) => (
+            {visibleTemplates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
@@ -162,12 +194,12 @@ export default function SOWPage() {
           <label className="ml-6 text-sm text-zinc-400">
             Author
           </label>
-
           <div className="flex items-center gap-2">
             <select
               value={selectedAuthor}
               onChange={(e) => setSelectedAuthor(Number(e.target.value))}
-              className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
+              style={{ width: getSelectWidth(selectedAuthorObj?.name ?? ""), }}
+              className="rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white outline-none focus:outline-none focus:ring-0 focus:border-white/10"
             >
               {authors.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -175,7 +207,6 @@ export default function SOWPage() {
                 </option>
               ))}
             </select>
-
             {!showNewAuthor ? (
               <>
                 <button
@@ -185,7 +216,6 @@ export default function SOWPage() {
                 >
                   <Plus size={16} />
                 </button>
-
                 <button
                   onClick={handleDeleteAuthor}
                   className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:border-red-500 hover:text-red-400"
@@ -203,14 +233,12 @@ export default function SOWPage() {
                   placeholder="Author name"
                   className="w-40 rounded-lg border border-white/10 bg-zinc-950/70 px-3 py-2 text-sm text-white"
                 />
-
                 <button
                   onClick={handleAddAuthor}
                   className="rounded-lg border border-emerald-500/40 p-2 text-emerald-400 transition hover:bg-emerald-500/10"
                 >
                   <Check size={16} />
                 </button>
-
                 <button
                   onClick={() => {
                     setShowNewAuthor(false);
@@ -224,18 +252,42 @@ export default function SOWPage() {
             )}
           </div>
 
+          {/* Push document type toggle to the far right */}
+          <div className="ml-auto flex items-center gap-3">
+            {/* <label className="text-sm text-zinc-400">
+              Doc Type
+            </label> */}
+
+            <div className="flex items-center rounded-lg border border-white/10 bg-zinc-950/70 p-1">
+              <button
+                onClick={() => handleModeChange("sow")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  mode === "sow" ? "bg-[#c90c61] text-white" : "text-zinc-400 hover:text-white" }`}
+              >
+                SOW
+              </button>
+
+              <button
+                onClick={() => handleModeChange("proposal")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  mode === "proposal" ? "bg-[#c90c61] text-white" : "text-zinc-400 hover:text-white" }`}
+              >
+                Proposal
+              </button>
+            </div>
+          </div>
+
           {templates.length === 0 && (
             <span className="text-xs text-zinc-500">
               Upload one from the Resources page
             </span>
           )}
         </div>
-
         {/* Grid */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TranscriptPanel transcript={transcript} setTranscript={setTranscript} />
-
           <DiscoveryPanel
+            mode={mode}
             transcript={transcript}
             authorId={selectedAuthor}
             templateId={selectedTemplate}
@@ -246,21 +298,24 @@ export default function SOWPage() {
             setConfidence={setConfidence}
             setHistoricalSowsUsed={setHistoricalSowsUsed}
             setHistoricalRisksConsidered={setHistoricalRisksConsidered}
+            setStructuredProposal={setStructuredProposal}
           />
         </div>
-
-        {/* SOW Viewer */}
+        {/* SOW / Proposal Viewer */}
         <div className="mt-6">
-          <SowViewer sow={sow} />
+          <SowViewer sow={sow} mode={mode} />
         </div>
-        {/* Review Panel */}
-        <ReviewPanel review={review} confidence={confidence} />
+        {/* Review Panel — AI Reviewers only apply to SOW mode */}
+        {mode === "sow" && <ReviewPanel review={review} confidence={confidence} />}
         {/* Export */}
         <div className="mt-6">
           <ExportPanel
+            mode={mode}
             state={state}
             sow={sow}
             templateId={selectedTemplate}
+            templateType={selectedTemplateObj?.type}
+            structuredProposal={structuredProposal}
             transcript={transcript}
           />
         </div>

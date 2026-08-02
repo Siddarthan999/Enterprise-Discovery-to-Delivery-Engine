@@ -22,6 +22,8 @@ type Template = {
   name: string;
   filename: string;
   sections?: string[];
+  type?: "docx" | "pptx";
+  slide_count?: number;
 };
 
 type KnowledgeDoc = {
@@ -99,9 +101,7 @@ export default function ResourcesPage() {
 
   const [expandedSow, setExpandedSow] = useState<string | null>(null);
 
-  const [riskMap, setRiskMap] = useState<
-    Record<string, RiskExample[]>
-  >({});
+  const [riskMap, setRiskMap] = useState<Record<string, RiskExample[]>>({});
 
   const loadTemplates = useCallback(async () => {
     setTemplates(await getTemplates());
@@ -219,7 +219,7 @@ export default function ResourcesPage() {
               </h1>
 
               <p className="mt-0.5 text-sm text-zinc-400">
-                Manage SOW templates, knowledge base documents, and historical SOWs.
+                Manage SOW/Proposal templates, knowledge base documents, and historical SOWs.
               </p>
             </div>
           </div>
@@ -250,7 +250,7 @@ export default function ResourcesPage() {
                   : "bg-zinc-900/80 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
               }`}
             >
-              SOW Templates
+              Templates
               <div className="mt-0.5 text-xs font-normal opacity-70">
                 {templates.length} file{templates.length === 1 ? "" : "s"}
               </div>
@@ -277,14 +277,14 @@ export default function ResourcesPage() {
             <div className="rounded-2xl border border-white/10 bg-zinc-900/80 p-6 shadow-lg shadow-black/20">
               <h2 className="text-sm font-semibold text-white">
                 {isTemplates
-                  ? "Upload a SOW template"
+                  ? "Upload a SOW or Proposal template"
                   : isHistory
                   ? "Upload a past SOW as precedent"
                   : "Add a document to the knowledge base"}
               </h2>
               <p className="mt-1 text-xs text-zinc-400">
                 {isTemplates
-                  ? "DOCX files used as the base layout/branding for generated SOWs."
+                  ? "DOCX files are used as the base layout/branding for generated SOWs. PPTX/POTX files are used as slide templates for generated Proposals."
                   : isHistory
                   ? "Completed SOWs from past engagements. Used to ground new SOWs in your firm's actual drafting style and to surface precedent risks."
                   : "PDF, DOCX, TXT, PPTX, MD, or EML files — parsed and embedded for search and discovery context."}
@@ -314,7 +314,7 @@ export default function ResourcesPage() {
                   id="file-upload"
                   key={tab}
                   type="file"
-                  accept={isTemplates ? ".docx" : ".txt,.pdf,.docx,.pptx,.md,.eml"}
+                  accept={isTemplates ? ".docx,.pptx,.potx" : ".txt,.pdf,.docx,.pptx,.md,.eml"}
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="hidden"
                 />
@@ -352,35 +352,58 @@ export default function ResourcesPage() {
                   </p>
                 ) : (
                   <ul className="divide-y divide-white/5">
-                    {templates.map((t) => (
-                      <li
-                        key={t.id}
-                        className="flex items-center justify-between gap-4 px-6 py-4"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="rounded-lg bg-cyan-500/10 p-2 text-cyan-400">
-                            <FileIcon />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-white">
-                              {t.name}
-                            </p>
-                            <p className="text-xs text-zinc-500">
-                              {t.sections?.length || 0} section{t.sections?.length === 1 ? "" : "s"} detected
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleDeleteTemplate(t.id)}
-                          disabled={deletingId === t.id}
-                          className="rounded-lg p-2 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
-                          title="Delete template"
+                    {templates.map((t) => {
+                      const isPptx = t.type === "pptx";
+                      const count = isPptx
+                        ? t.slide_count ?? t.sections?.length ?? 0
+                        : t.sections?.length ?? 0;
+                      return (
+                        <li
+                          key={t.id}
+                          className="flex items-center justify-between gap-4 px-6 py-4"
                         >
-                          <TrashIcon />
-                        </button>
-                      </li>
-                    ))}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`rounded-lg p-2 ${
+                                isPptx ? "bg-amber-500/10 text-amber-400" : "bg-cyan-500/10 text-cyan-400"
+                              }`}
+                            >
+                              <FileIcon />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-medium text-white">
+                                  {t.name}
+                                </p>
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                    isPptx
+                                      ? "bg-amber-500/15 text-amber-300"
+                                      : "bg-cyan-500/15 text-cyan-300"
+                                  }`}
+                                >
+                                  {isPptx ? "PPTX" : "DOCX"}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-500">
+                                {isPptx
+                                  ? `${count} slide${count === 1 ? "" : "s"} detected`
+                                  : `${count} section${count === 1 ? "" : "s"} detected`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleDeleteTemplate(t.id)}
+                            disabled={deletingId === t.id}
+                            className="rounded-lg p-2 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+                            title="Delete template"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )
               ) : isHistory ? (
