@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { Sparkles, Loader2, ChevronDown, ListTree } from "lucide-react";
 
+type DocMode = "sow" | "proposal";
+
 export default function DiscoveryPanel({
+  mode,
   transcript,
   authorId,
   templateId,
@@ -14,7 +17,9 @@ export default function DiscoveryPanel({
   setConfidence,
   setHistoricalSowsUsed,
   setHistoricalRisksConsidered,
+  setStructuredProposal,
 }: {
+  mode: DocMode;
   transcript: string;
   authorId?: number | "";
   templateId?: string;
@@ -25,6 +30,7 @@ export default function DiscoveryPanel({
   setConfidence: (value: any) => void;
   setHistoricalSowsUsed: (value: any[]) => void;
   setHistoricalRisksConsidered: (value: any[]) => void;
+  setStructuredProposal: (value: any) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -39,12 +45,18 @@ export default function DiscoveryPanel({
       setConfidence(null);
       setHistoricalSowsUsed([]);
       setHistoricalRisksConsidered([]);
+      setStructuredProposal(null);
 
-      const res = await fetch("http://localhost:8000/api/discovery/extract", {
+      const extractUrl =
+        mode === "proposal"
+          ? "http://localhost:8000/api/proposal/extract"
+          : "http://localhost:8000/api/discovery/extract";
+
+      const res = await fetch(extractUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: "Discovery Session",
+          title: mode === "proposal" ? "Proposal Discovery Session" : "Discovery Session",
           transcript,
         }),
       });
@@ -60,6 +72,37 @@ export default function DiscoveryPanel({
 
       if (!data.state || data.state.error) {
         setSow("");
+        return;
+      }
+
+      if (mode === "proposal") {
+        // Proposal mode never calls the AI reviewer agents — no review/
+        // confidence/historical-grounding calls happen here at all.
+        const proposalRes = await fetch("http://localhost:8000/api/proposal/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            state: data.state,
+            author_id: authorId || undefined,
+          }),
+        });
+
+        const proposalData = await proposalRes.json();
+
+        if (!proposalRes.ok) {
+          throw new Error(proposalData?.error || "Proposal generation failed");
+        }
+
+        if (proposalData.error) {
+          throw new Error(proposalData.error);
+        }
+
+        setSow(proposalData.sow || "");
+        setStructuredProposal(proposalData.structured_proposal ?? null);
+        setReview(null);
+        setConfidence(null);
+        setHistoricalSowsUsed([]);
+        setHistoricalRisksConsidered([]);
         return;
       }
 
@@ -98,11 +141,12 @@ export default function DiscoveryPanel({
       setConfidence(null);
       setHistoricalSowsUsed([]);
       setHistoricalRisksConsidered([]);
+      setStructuredProposal(null);
 
       setState((prev: any) => ({
         ...(prev || {}),
         frontend_error:
-          err?.message || "Discovery or SOW generation failed",
+          err?.message || "Discovery or generation failed",
       }));
     } finally {
       setLoading(false);
@@ -124,7 +168,9 @@ export default function DiscoveryPanel({
         <div>
           <h2 className="text-lg font-medium">Discovery Engine</h2>
           <p className="text-xs text-zinc-400">
-            Extract structured project state from client context
+            {mode === "proposal"
+              ? "Extract structured proposal fields from client context"
+              : "Extract structured project state from client context"}
           </p>
         </div>
       </div>
