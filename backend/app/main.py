@@ -10,6 +10,7 @@ from app.api.routes import transcript
 from app.api.routes.discovery import router as discovery_router
 from app.api.routes import ws
 from app.api.routes.sow import router as sow_router
+from app.api.routes.proposal import router as proposal_router
 from app.api.routes.export import router as export_router
 from app.api.routes import template
 from app.api.routes import debug_search
@@ -37,6 +38,7 @@ app.include_router(transcript.router, prefix="/api")
 app.include_router(discovery_router, prefix="/api")
 app.include_router(ws.router, prefix="/api")
 app.include_router(sow_router, prefix="/api")
+app.include_router(proposal_router, prefix="/api")
 app.include_router(export_router, prefix="/api")
 app.include_router(template.router, prefix="/api/template")
 app.include_router(debug_search.router, prefix="/api")
