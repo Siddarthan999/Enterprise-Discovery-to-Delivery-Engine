@@ -1,10 +1,11 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.routes.health import router as health_router
 from app.api.routes.ingest import router as ingest_router
 from app.api.routes.search import router as search_router
 from app.api.routes.graph import router as graph_router
 from app.db.init_db import init_db
-from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.answer import router as answer_router
 from app.api.routes import transcript
 from app.api.routes.discovery import router as discovery_router
@@ -20,6 +21,18 @@ from app.api.routes import sow_approval
 from app.api.routes import delivery
 
 app = FastAPI(title="Enterprise OS")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # TEMPORARILY for debugging.
+    # allow_origins=[
+    #     "http://localhost:3000",
+    #     "http://127.0.0.1:3000"
+    # ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def startup():
@@ -46,15 +59,3 @@ app.include_router(sow_history_router, prefix="/api")
 app.include_router(sow_authors.router, prefix="/api")
 app.include_router(sow_approval.router, prefix="/api")
 app.include_router(delivery.router, prefix="/api")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # TEMPORARILY for debugging.
-    # allow_origins=[
-    #     "http://localhost:3000",
-    #     "http://127.0.0.1:3000"
-    # ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
