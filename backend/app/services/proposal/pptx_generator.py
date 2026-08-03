@@ -53,6 +53,13 @@ def _build_content_blocks(sp: dict) -> list[dict]:
     if sp.get("executive_summary"):
         blocks.append({"title": "Executive Summary", "body": [sp["executive_summary"]]})
 
+    landscape_body = []
+    if sp.get("current_landscape_intro"):
+        landscape_body.append(sp["current_landscape_intro"])
+    landscape_body.extend(sp.get("current_landscape_points") or [])
+    if landscape_body:
+        blocks.append({"title": "Current Landscape", "body": landscape_body})
+
     heard_body = []
     if sp.get("what_weve_heard_intro"):
         heard_body.append(sp["what_weve_heard_intro"])
@@ -60,17 +67,43 @@ def _build_content_blocks(sp: dict) -> list[dict]:
     if heard_body:
         blocks.append({"title": "What We've Heard", "body": heard_body})
 
+    if sp.get("strategic_goals"):
+        blocks.append({"title": "Strategic Goals", "body": sp["strategic_goals"]})
+
     if sp.get("target_outcomes"):
         blocks.append({"title": "Target Outcomes", "body": sp["target_outcomes"]})
+
+    if sp.get("solution_overview") or sp.get("solution_components"):
+        body = [sp["solution_overview"]] if sp.get("solution_overview") else []
+        for comp in sp.get("solution_components") or []:
+            name = comp.get("name") or "Component"
+            desc = comp.get("description") or ""
+            body.append(f"{name}: {desc}" if desc else name)
+        blocks.append({"title": "Proposed Solution", "body": body})
 
     for i, phase in enumerate(sp.get("approach_phases") or [], start=1):
         title = phase.get("title") or f"Phase {i}"
         body = []
+        if phase.get("objective"):
+            body.append(f"Objective: {phase['objective']}")
         if phase.get("narrative"):
             body.append(phase["narrative"])
         body.extend(phase.get("indicative_activities") or [])
         if body:
             blocks.append({"title": f"Approach \u2014 {title}", "body": body})
+
+    if sp.get("change_management_narrative"):
+        blocks.append({"title": "Change Management Approach", "body": [sp["change_management_narrative"]]})
+
+    if sp.get("risk_items"):
+        body = []
+        for item in sp["risk_items"]:
+            risk = item.get("risk") or ""
+            mitigation = item.get("mitigation") or ""
+            if risk:
+                body.append(f"{risk} (Mitigation: {mitigation})" if mitigation else risk)
+        if body:
+            blocks.append({"title": "Risk Management", "body": body})
 
     if sp.get("in_scope"):
         blocks.append({"title": "In Scope", "body": sp["in_scope"]})

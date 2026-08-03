@@ -11,15 +11,7 @@ const BASE_FORMATS = [
 
 type DocMode = "sow" | "proposal";
 
-export default function ExportPanel({
-  mode,
-  state,
-  sow,
-  templateId,
-  templateType,
-  structuredProposal,
-  transcript,
-}: {
+export default function ExportPanel({ mode, state, sow, templateId, templateType, structuredProposal, transcript, }: {
   mode: DocMode;
   state: any;
   sow: string;
@@ -91,6 +83,7 @@ export default function ExportPanel({
           template_id: templateId,
           state,
           transcript,
+          mode,
         }),
       });
 

@@ -33,6 +33,14 @@ _BULLET_LINE_RE = re.compile(r"^[-\u25cf]\s+")
 _BULLET_ABSTRACT_NUM_ID = "9001"
 _BULLET_NUM_ID = "9001"
 
+_DOC_TYPE_LABELS = {
+    "sow": "Statement of Work",
+    "proposal": "Proposal",
+}
+
+def _resolve_doc_type_label(doc_type: str | None) -> str:
+    return _DOC_TYPE_LABELS.get((doc_type or "sow").lower(), "Statement of Work")
+
 def _get_installed_font_names() -> set:
     global _INSTALLED_FONTS_CACHE
     if _INSTALLED_FONTS_CACHE is not None:
@@ -360,13 +368,14 @@ def _apply_token_syntax(raw_text: str, cover_fields: dict, completion_date: str)
     return new_text if new_text != raw_text else None
 
 
-def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
+def apply_cover_page_fields(doc: Document, cover_fields: dict | None, doc_type: str = "sow"):
     if not cover_fields:
         cover_fields = {}
 
     completion_date = cover_fields.get(
         "completion_date", datetime.utcnow().strftime("%B %d, %Y")
     )
+    doc_type_label = _resolve_doc_type_label(doc_type)
 
     body_anchor = _find_body_placeholder(doc)
 
@@ -377,6 +386,10 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
         raw_text = para.text
         stripped = raw_text.strip()
         lowered = stripped.lower()
+
+        if lowered == "statement of work":
+            _set_paragraph_text_preserve_format(para, doc_type_label)
+            continue
 
         new_text = _apply_token_syntax(raw_text, cover_fields, completion_date)
         if new_text is not None:
@@ -394,7 +407,7 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
             _set_paragraph_text_preserve_format(
-                para, f"This statement of work completed on {completion_date}"
+                para, f"This {doc_type_label.lower()} completed on {completion_date}"
             )
             continue
 
@@ -435,7 +448,7 @@ def apply_cover_page_fields(doc: Document, cover_fields: dict | None):
             continue
 
         if lowered.startswith(_COMPLETED_ON_PREFIX):
-            _set_sdt_text(sdt, f"This statement of work completed on {completion_date}")
+            _set_sdt_text(sdt, f"This {doc_type_label.lower()} completed on {completion_date}")
             continue
 
         if _looks_like_stray_section_heading(stripped):
@@ -765,7 +778,7 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
 _GENERATED_HEADING_STYLE_NAMES = ("SOW Title", "SOW Heading 1")
 
 
-def _dedupe_stray_cover_headings(doc: Document):
+def _dedupe_stray_cover_headings(doc: Document, sow_markdown: str | None = None):
     paragraphs = doc.paragraphs
 
     first_real_heading_idx = None
@@ -778,22 +791,36 @@ def _dedupe_stray_cover_headings(doc: Document):
     if first_real_heading_idx is None:
         return
 
-    for para in paragraphs[:first_real_heading_idx]:
-        if _looks_like_stray_section_heading(para.text):
-            _remove_paragraph(para)
+    body_heading_texts = set()
+    if sow_markdown:
+        for line in sow_markdown.splitlines():
+            line = line.strip()
+            if line.startswith("#"):
+                match = re.match(r"^#{1,3}\s+(.+)$", line)
+                if match:
+                    body_heading_texts.add(_normalize_heading_text(match.group(1)).lower())
 
+    for para in paragraphs[:first_real_heading_idx]:
+        normalized = _normalize_heading_text(para.text).lower()
+        if _looks_like_stray_section_heading(para.text) or (
+            normalized and normalized in body_heading_texts
+        ):
+            _remove_paragraph(para)
 
 # ----------------------------
 # MAIN EXPORT FUNCTION
 # ----------------------------
-def export_docx_from_template(template_path: str, sow_markdown: str,
-                               cover_fields: dict | None = None,
-                               for_pdf: bool = False) -> bytes:
-
+def export_docx_from_template(
+    template_path: str,
+    sow_markdown: str,
+    cover_fields: dict | None = None,
+    for_pdf: bool = False,
+    doc_type: str = "sow",
+) -> bytes:
     doc = load_template(template_path)
-    apply_cover_page_fields(doc, cover_fields)
+    apply_cover_page_fields(doc, cover_fields, doc_type=doc_type)
     doc = add_sow_content(doc, sow_markdown, for_pdf=for_pdf)
-    _dedupe_stray_cover_headings(doc)
+    _dedupe_stray_cover_headings(doc, sow_markdown)
 
     buffer = BytesIO()
     doc.save(buffer)

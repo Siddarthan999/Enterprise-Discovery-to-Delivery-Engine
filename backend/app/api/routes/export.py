@@ -11,7 +11,9 @@ from app.services.sow.template_store import get_template_path
 from app.services.sow.cover_field_extractor import derive_cover_fields
 from app.services.email.email_service import send_sow_email
 
+
 router = APIRouter(tags=["export"])
+
 
 class EmailSOWRequest(BaseModel):
     sow: str
@@ -24,10 +26,11 @@ class EmailSOWRequest(BaseModel):
     recipient_email: EmailStr
     sender_name: Optional[str] = None
     custom_message: Optional[str] = None
+    mode: Optional[str] = "sow"
+
 
 @router.post("/sow/export")
 def export_sow(payload: dict):
-
     sow_text = payload.get("sow")
     format_type = payload.get("format", "md")
     template_id = payload.get("template_id")
@@ -35,13 +38,13 @@ def export_sow(payload: dict):
     transcript = payload.get("transcript")
     sow_id = payload.get("sow_id")
     version = payload.get("version")
+    doc_type = payload.get("mode", "sow")
 
     if not sow_text:
         return {"error": "No SOW provided"}
 
     if discovery_state is None and sow_id and version:
         with engine.begin() as conn:
-             # Try the requested version first
             discovery_state = conn.execute(text("""
                 SELECT source_state_json
                 FROM sow_versions
@@ -52,7 +55,6 @@ def export_sow(payload: dict):
                 "ver": version,
             }).scalar()
 
-            # If that version doesn't have a state, use Version 1
             if discovery_state is None:
                 discovery_state = conn.execute(text("""
                     SELECT source_state_json
@@ -65,8 +67,6 @@ def export_sow(payload: dict):
 
     template_path = get_template_path(template_id)
 
-    # Cover-page fields are derived automatically from the discovery
-    # state / generated SOW / transcript — no manual entry required.
     cover_fields = derive_cover_fields(
         state=discovery_state,
         sow_markdown=sow_text,
@@ -74,13 +74,12 @@ def export_sow(payload: dict):
     )
     print("DEBUG derived cover_fields:", cover_fields)
 
-    # ---------------- DOCX ----------------
     if format_type == "docx":
-
         file_bytes = export_docx(
             sow_text=sow_text,
             template_path=template_path,
-            cover_fields=cover_fields
+            cover_fields=cover_fields,
+            doc_type=doc_type,
         )
 
         return Response(
@@ -89,13 +88,12 @@ def export_sow(payload: dict):
             headers={"Content-Disposition": "attachment; filename=sow.docx"}
         )
 
-    # ---------------- PDF ----------------
     if format_type == "pdf":
-
         file_bytes = export_pdf(
             sow_text=sow_text,
             template_path=template_path,
-            cover_fields=cover_fields
+            cover_fields=cover_fields,
+            doc_type=doc_type,
         )
 
         return Response(
@@ -104,11 +102,11 @@ def export_sow(payload: dict):
             headers={"Content-Disposition": "attachment; filename=sow.pdf"}
         )
 
-    # ---------------- MD ----------------
     return {
         "format": "md",
         "sow": sow_text
     }
+
 
 @router.post("/sow/email")
 async def email_sow(payload: EmailSOWRequest):
@@ -126,11 +124,11 @@ async def email_sow(payload: EmailSOWRequest):
         recipient_email = payload.recipient_email
         sender_name = payload.sender_name or "Enterprise OS Team"
         custom_message = payload.custom_message
+        doc_type = payload.mode or "sow"
 
         if not sow_text:
             raise HTTPException(status_code=400, detail="No SOW content provided")
 
-        # Fetch discovery state if not provided
         if discovery_state is None and sow_id and version:
             with engine.begin() as conn:
                 discovery_state = conn.execute(text("""
@@ -160,7 +158,6 @@ async def email_sow(payload: EmailSOWRequest):
             transcript=transcript,
         )
 
-        # Get document title
         doc_title = "Statement of Work"
         if sow_id:
             with engine.begin() as conn:
@@ -170,36 +167,36 @@ async def email_sow(payload: EmailSOWRequest):
                 if result:
                     doc_title = result[0]
 
-        # Generate file based on format
         file_bytes = None
         filename = f"{doc_title.replace(' ', '_')}_v{version or 1}"
-        
+
         if format_type == "docx":
             file_bytes = export_docx(
                 sow_text=sow_text,
                 template_path=template_path,
-                cover_fields=cover_fields
+                cover_fields=cover_fields,
+                doc_type=doc_type,
             )
             filename += ".docx"
             mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            
+
         elif format_type == "pdf":
             file_bytes = export_pdf(
                 sow_text=sow_text,
                 template_path=template_path,
-                cover_fields=cover_fields
+                cover_fields=cover_fields,
+                doc_type=doc_type,
             )
             filename += ".pdf"
             mime_type = "application/pdf"
-            
+
         elif format_type == "md":
-            file_bytes = sow_text.encode('utf-8')
+            file_bytes = sow_text.encode("utf-8")
             filename += ".md"
             mime_type = "text/markdown"
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format_type}")
 
-        # Send email
         success = await send_sow_email(
             recipient_email=recipient_email,
             sender_name=sender_name,

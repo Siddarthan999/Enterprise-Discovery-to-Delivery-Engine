@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.core.llm_router import generate_completion
 from app.services.proposal.proposal_extractor import extract_proposal_state
 from app.services.proposal.save_proposal import save_generated_proposal
+from app.services.proposal.company_profile import COMPANY_PROFILE
 from app.services.sow.project_state_service import save_project_state
 from fastapi.responses import StreamingResponse
 from app.services.sow.template_storage import load_templates, TEMPLATE_DIR
@@ -18,31 +19,27 @@ BULLET = "\u25cf"  # ●
 
 
 # ---------------------------------------------------------------------------
-# Extraction  (unchanged from before)
+# Extraction (unchanged endpoint — extractor itself now captures more)
 # ---------------------------------------------------------------------------
 class ProposalDiscoveryRequest(BaseModel):
     title: str = "Discovery Session"
     transcript: str
 
+
 class ProposalPptxExportRequest(BaseModel):
     structured_proposal: dict
     template_id: str
+
 
 @router.post("/proposal/extract")
 def proposal_discovery(payload: ProposalDiscoveryRequest):
     transcript = (payload.transcript or "").strip()
     if not transcript:
-        return {
-            "error": "Transcript is empty",
-            "state": None,
-        }
+        return {"error": "Transcript is empty", "state": None}
 
     state = extract_proposal_state(transcript)
     if not isinstance(state, dict):
-        return {
-            "error": "Proposal extraction returned invalid state",
-            "state": None,
-        }
+        return {"error": "Proposal extraction returned invalid state", "state": None}
 
     if state.get("error"):
         return {
@@ -52,15 +49,11 @@ def proposal_discovery(payload: ProposalDiscoveryRequest):
         }
 
     save_project_state(payload.title, state)
-
-    return {
-        "title": payload.title,
-        "state": state,
-    }
+    return {"title": payload.title, "state": state}
 
 
 # ---------------------------------------------------------------------------
-# Generation — now a real writing pass, not a field dump
+# Generation — significantly deeper structured output
 # ---------------------------------------------------------------------------
 class ProposalRequest(BaseModel):
     state: dict | None = None
@@ -71,8 +64,19 @@ class ProposalRequest(BaseModel):
 
 class ApproachPhase(BaseModel):
     title: str = ""
+    objective: str = ""
     narrative: str = ""
     indicative_activities: list[str] = Field(default_factory=list)
+
+
+class SolutionComponent(BaseModel):
+    name: str = ""
+    description: str = ""
+
+
+class RiskItem(BaseModel):
+    risk: str = ""
+    mitigation: str = ""
 
 
 class CommercialOption(BaseModel):
@@ -87,17 +91,35 @@ class TeamRole(BaseModel):
 
 class StructuredProposal(BaseModel):
     proposal_title: str = "Proposal"
+
     executive_summary: str = ""
+
+    current_landscape_intro: str = ""
+    current_landscape_points: list[str] = Field(default_factory=list)
+
     what_weve_heard_intro: str = ""
     what_weve_heard_themes: list[str] = Field(default_factory=list)
+
+    strategic_goals: list[str] = Field(default_factory=list)
     target_outcomes: list[str] = Field(default_factory=list)
+    success_metrics: list[str] = Field(default_factory=list)
+
+    solution_overview: str = ""
+    solution_components: list[SolutionComponent] = Field(default_factory=list)
+
     approach_phases: list[ApproachPhase] = Field(default_factory=list)
+
+    change_management_narrative: str = ""
+    risk_items: list[RiskItem] = Field(default_factory=list)
+
     in_scope: list[str] = Field(default_factory=list)
     out_of_scope: list[str] = Field(default_factory=list)
     deliverables: list[str] = Field(default_factory=list)
+
     commercial_narrative: str = ""
     commercial_options: list[CommercialOption] = Field(default_factory=list)
     team_roles: list[TeamRole] = Field(default_factory=list)
+
     why_this_approach: str = ""
     next_steps: list[str] = Field(default_factory=list)
 
@@ -134,11 +156,18 @@ def _format_state_for_prompt(state: dict) -> str:
         _str_block("CLIENT NAME", state.get("client_name")),
         _str_block("INDUSTRY", state.get("industry")),
         _str_block("BUSINESS CONTEXT", state.get("business_context")),
+        _list_block("CURRENT LANDSCAPE (AS-IS STATE)", state.get("current_landscape", [])),
         _list_block("BUSINESS CHALLENGES", state.get("business_challenges", [])),
+        _list_block("STRATEGIC GOALS", state.get("strategic_goals", [])),
         _list_block("PROJECT OBJECTIVES", state.get("project_objectives", [])),
+        _list_block("SUCCESS METRICS", state.get("success_metrics", [])),
         _str_block("PROPOSED SOLUTION", state.get("proposed_solution")),
+        _list_block("SOLUTION COMPONENTS", state.get("solution_components", [])),
         _str_block("DELIVERY APPROACH", state.get("delivery_approach")),
         _list_block("TECHNOLOGIES", state.get("technologies", [])),
+        _list_block("INTEGRATION REQUIREMENTS", state.get("integration_requirements", [])),
+        _list_block("RISKS", state.get("risks", [])),
+        _list_block("STAKEHOLDERS", state.get("stakeholders", [])),
         _list_block("IN SCOPE", state.get("in_scope", [])),
         _list_block("OUT OF SCOPE", state.get("out_of_scope", [])),
         _list_block("DELIVERABLES", state.get("deliverables", [])),
@@ -161,12 +190,12 @@ def build_structured_proposal_prompt(state: dict, transcript: str | None) -> str
     )
 
     return f"""
-You are a senior consulting proposal writer. You are drafting a client-facing Proposal
-document from a structured extraction of a discovery conversation. Your job is to WRITE the
-proposal, not restate the extracted bullets. Every extracted fact must be rewritten in your
-own words, elaborated with reasoning and context, and organised into a persuasive narrative
-\u2014 the way an experienced consultant would frame it back to a client, not the way a form
-would list it.
+You are a senior consulting proposal writer producing a HIGH-LEVEL SOLUTION PROPOSAL —
+the kind of document a consulting firm sends a prospective client: thorough, structured,
+and written with the depth of a real solution architecture and delivery plan, not a brief
+summary memo. Every section should read like an experienced consultant explaining their
+thinking to a client's leadership team, with real elaboration and reasoning — not a bullet
+dump of the extracted facts.
 
 IMPORTANT:
 - Do NOT write markdown, headings, or section numbers \u2014 the caller renders those.
@@ -174,61 +203,80 @@ IMPORTANT:
   short paragraph where useful) that explains the "so what", not just the "what".
 - Return ONLY valid JSON matching the requested schema below.
 - NEVER invent client facts, numbers, dates, headcounts, tool names, or commercial terms
-  that are not present in the extracted state or transcript. Where something isn't captured
-  (e.g. specific pricing, team size, exact duration), write in general/qualitative terms
-  instead of a fabricated number ("a phased engagement" rather than inventing "12 weeks" if
-  no duration was captured).
+  that are not present in the extracted state or transcript. Where something isn't captured,
+  write in general/qualitative terms instead of a fabricated specific.
+- NEVER invent your own company's credentials, certifications, awards, or case studies —
+  that content is added separately and is out of scope for you to write.
 - Where the extracted state genuinely contains very little for a section, it is fine for
-  that section to be shorter or more general \u2014 do not pad with invented specifics.
+  that section to be shorter, or for a list field to come back empty \u2014 do not pad with
+  invented specifics.
 
 EXTRACTED PROJECT STATE (the ONLY source of client-specific facts you may use):
 {state_text}{transcript_block}
 
 WRITING GUIDANCE PER SECTION:
 
-- executive_summary: 2\u20134 sentences. Frame the client's situation (from business_context
-  and industry), what they're trying to achieve (from project_objectives), and at a high
-  level what's being proposed (from proposed_solution) \u2014 written as a narrative opening,
-  not a list.
+- executive_summary: 3\u20135 sentences. Frame the client's situation (business_context,
+  industry), the strategic stakes (why this matters now), and at a high level what's being
+  proposed (proposed_solution) \u2014 a narrative opening, not a list.
 
-- what_weve_heard_intro: 1\u20132 sentences setting up the themes that follow, based on
-  business_context.
-- what_weve_heard_themes: turn each business_challenge (and any relevant assumption) into a
-  fully-written theme \u2014 explain the challenge AND its implication for the client, in 1\u20133
-  sentences each. Do not just restate the challenge as given; add the "why this matters"
-  framing based on context you were given.
+- current_landscape_intro: 1\u20132 sentences introducing the client's as-is operating
+  environment, based on current_landscape and business_context.
+- current_landscape_points: turn each current_landscape item into a fully-written point
+  (1\u20133 sentences) explaining what exists today AND why it matters for this engagement.
+  If current_landscape is empty, return an empty list \u2014 do not invent the client's tooling.
 
-- target_outcomes: turn each project_objective into an outcome statement written from the
-  client's point of view (what will be true once this succeeds), 1\u20132 sentences each.
+- what_weve_heard_intro / what_weve_heard_themes: as before \u2014 turn each
+  business_challenge into a fully-written theme with the "why this matters" framing, 1\u20133
+  sentences each.
 
-- approach_phases: derive a small number of logical phases (2\u20134) from delivery_approach and
-  timeline. Each phase needs a short title, a 2\u20134 sentence narrative explaining what happens
-  and why it's sequenced that way, and a handful of indicative_activities written as full
-  sentences (not fragment bullets) grounded in proposed_solution/technologies/deliverables.
-  If timeline data is sparse, phase the approach logically based on delivery_approach alone
-  rather than inventing dates.
+- strategic_goals: rewrite each captured strategic_goal as a full sentence connecting it to
+  why it matters to the client's leadership. Empty list if none were captured.
+- target_outcomes: turn each project_objective into an outcome statement from the client's
+  point of view, 1\u20132 sentences each.
+- success_metrics: rewrite each captured success_metric as a clear, concrete statement. Empty
+  list if none were captured \u2014 do not invent KPI targets.
 
-- in_scope / out_of_scope: rewrite each captured item as a complete, specific sentence.
-  Do not add scope items that weren't captured.
+- solution_overview: 2\u20133 sentences framing the overall shape of the proposed solution
+  (proposed_solution + delivery_approach + technologies), before the component breakdown.
+- solution_components: one entry per solution_component captured (or, if none were captured
+  as discrete components but proposed_solution/technologies clearly implies a few, you may
+  group proposed_solution into 2\u20134 logical components) \u2014 each with a short name and a
+  2\u20133 sentence description of what it does and why it's included, grounded only in
+  proposed_solution/technologies/integration_requirements.
 
-- deliverables: rewrite each captured deliverable as a full sentence describing what it is
-  and what it enables, not just its name.
+- approach_phases: derive 3\u20135 logical phases from delivery_approach and timeline. Each
+  phase needs: a short title; a one-sentence objective (in the style "To align X with Y,
+  defining Z" \u2014 outcome-oriented, not a activity list); a 1\u20132 sentence narrative giving
+  additional context; and 3\u20136 indicative_activities as full sentences grounded in
+  proposed_solution/technologies/deliverables/integration_requirements. If timeline data is
+  sparse, phase the approach logically based on delivery_approach alone.
+
+- change_management_narrative: 2\u20134 sentences on how change/adoption will be managed for
+  THIS client specifically, grounded in business_challenges/stakeholders/assumptions. If
+  nothing specific was captured, a brief general statement is fine (this is supplemented by
+  a standard methodology section added separately) \u2014 do not invent specifics.
+
+- risk_items: one entry per captured risk, each with the risk restated clearly and, only if
+  a mitigation was actually discussed or is a direct logical consequence of the proposed
+  solution, a mitigation sentence \u2014 otherwise leave mitigation as an empty string. Empty
+  list if no risks were captured.
+
+- in_scope / out_of_scope / deliverables: rewrite each captured item as a complete, specific
+  sentence. Do not add items that weren't captured.
 
 - commercial_narrative: 2\u20133 sentences framing the commercial approach based on
   commercial_information and dependencies. If commercial_information is empty, say pricing
-  will be confirmed once scope is finalised \u2014 do not invent numbers.
-- commercial_options: only populate if commercial_information suggests tiered/optional
-  scope; otherwise return an empty list rather than inventing options.
-- team_roles: only populate if the state/transcript indicates specific roles/skills needed;
-  otherwise return an empty list rather than inventing a team structure.
+  will be confirmed once scope is finalised.
+- commercial_options / team_roles: only populate if the state clearly supports it; otherwise
+  empty list.
 
 - why_this_approach: 2\u20133 sentences explaining why this approach fits this client's
-  situation specifically, grounded in business_context/business_challenges \u2014 not generic
-  marketing copy, and without naming any consulting firm/brand.
+  situation specifically, grounded in business_context/business_challenges/strategic_goals
+  \u2014 not generic marketing copy, and without naming any consulting firm/brand.
 
-- next_steps: rewrite each captured next_step as a clear, actionable full sentence. If
-  dependencies were captured and aren't already reflected in next_steps, fold the most
-  important ones in as a next step (e.g. "Confirm X before work begins").
+- next_steps: rewrite each captured next_step as a clear, actionable full sentence, folding
+  in any unreflected dependencies as next steps where relevant.
 
 - proposal_title: "{state.get('client_name') or 'Client'} \u2014 Proposal" unless a more
   specific project/engagement name is implied by the state.
@@ -237,11 +285,23 @@ Return ONLY valid JSON with this structure:
 {{
   "proposal_title": "",
   "executive_summary": "",
+  "current_landscape_intro": "",
+  "current_landscape_points": [""],
   "what_weve_heard_intro": "",
   "what_weve_heard_themes": [""],
+  "strategic_goals": [""],
   "target_outcomes": [""],
+  "success_metrics": [""],
+  "solution_overview": "",
+  "solution_components": [
+    {{"name": "", "description": ""}}
+  ],
   "approach_phases": [
-    {{"title": "", "narrative": "", "indicative_activities": [""]}}
+    {{"title": "", "objective": "", "narrative": "", "indicative_activities": [""]}}
+  ],
+  "change_management_narrative": "",
+  "risk_items": [
+    {{"risk": "", "mitigation": ""}}
   ],
   "in_scope": [""],
   "out_of_scope": [""],
@@ -265,14 +325,16 @@ def generate_structured_proposal(state: dict, transcript: str | None) -> Structu
     parsed = json.loads(_extract_json_block(raw))
     proposal = StructuredProposal(**parsed)
 
-    # Defensive pass: strip any stray markdown the model injected into
-    # free-text fields, same guard SOW generation applies.
     proposal.executive_summary = _strip_markdown_artifacts(proposal.executive_summary)
+    proposal.current_landscape_intro = _strip_markdown_artifacts(proposal.current_landscape_intro)
     proposal.what_weve_heard_intro = _strip_markdown_artifacts(proposal.what_weve_heard_intro)
+    proposal.solution_overview = _strip_markdown_artifacts(proposal.solution_overview)
+    proposal.change_management_narrative = _strip_markdown_artifacts(proposal.change_management_narrative)
     proposal.commercial_narrative = _strip_markdown_artifacts(proposal.commercial_narrative)
     proposal.why_this_approach = _strip_markdown_artifacts(proposal.why_this_approach)
     for phase in proposal.approach_phases:
         phase.title = _strip_markdown_artifacts(phase.title)
+        phase.objective = _strip_markdown_artifacts(phase.objective)
         phase.narrative = _strip_markdown_artifacts(phase.narrative)
         phase.indicative_activities = [_strip_markdown_artifacts(a) for a in phase.indicative_activities]
 
@@ -291,10 +353,33 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
         "",
         proposal.executive_summary or "Executive summary to be confirmed during discovery.",
         "",
-        "## WHAT WE'VE HEARD",
-        "",
     ]
 
+    # --- About Us (static company profile) ---
+    lines.extend(["## ABOUT " + COMPANY_PROFILE["company_name"].upper(), ""])
+    lines.append(COMPANY_PROFILE["about_us"])
+    if COMPANY_PROFILE.get("key_differentiators"):
+        lines.extend(["", "**Key differentiators:**", ""])
+        lines.extend(_bullets(COMPANY_PROFILE["key_differentiators"]))
+    if COMPANY_PROFILE.get("credentials"):
+        lines.extend(["", "**Credentials and recognition:**", ""])
+        lines.extend(_bullets(COMPANY_PROFILE["credentials"]))
+
+    # --- Our Understanding ---
+    lines.extend(["", "## OUR UNDERSTANDING", ""])
+    if proposal.current_landscape_intro or proposal.current_landscape_points:
+        lines.append("### Current Landscape")
+        lines.append("")
+        if proposal.current_landscape_intro:
+            lines.append(proposal.current_landscape_intro)
+            lines.append("")
+        lines.extend(_bullets(proposal.current_landscape_points) or [
+            f"{BULLET} Current landscape to be confirmed during discovery."
+        ])
+        lines.append("")
+
+    lines.append("### What We've Heard")
+    lines.append("")
     if proposal.what_weve_heard_intro:
         lines.append(proposal.what_weve_heard_intro)
         lines.append("")
@@ -302,22 +387,49 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
         f"{BULLET} Key themes to be confirmed during discovery."
     ])
 
+    if proposal.strategic_goals:
+        lines.extend(["", "### Strategic Goals", ""])
+        lines.extend(_bullets(proposal.strategic_goals))
+
     lines.extend(["", "## TARGET OUTCOMES", ""])
     lines.extend(_bullets(proposal.target_outcomes) or [
         f"{BULLET} Target outcomes to be confirmed during discovery."
     ])
+    if proposal.success_metrics:
+        lines.extend(["", "**How we'll measure success:**", ""])
+        lines.extend(_bullets(proposal.success_metrics))
 
-    lines.extend(["", "## PROPOSED APPROACH", ""])
+    # --- Proposed Solution ---
+    lines.extend(["", "## PROPOSED SOLUTION", ""])
+    lines.append(proposal.solution_overview or "Solution overview to be confirmed during discovery.")
+    if proposal.solution_components:
+        lines.extend(["", "### Core Solution Components", ""])
+        for comp in proposal.solution_components:
+            name = comp.name or "Component"
+            desc = comp.description or ""
+            lines.append(f"{BULLET} **{name}** \u2014 {desc}" if desc else f"{BULLET} **{name}**")
+
+    # --- Delivery Approach ---
+    lines.extend(["", "## DELIVERY APPROACH", ""])
+    if COMPANY_PROFILE.get("delivery_methodology_summary"):
+        lines.append(
+            f"Delivered using our {COMPANY_PROFILE.get('delivery_methodology_name', 'delivery')} "
+            f"methodology: {COMPANY_PROFILE['delivery_methodology_summary']}"
+        )
+        lines.append("")
     if proposal.approach_phases:
         for i, phase in enumerate(proposal.approach_phases, start=1):
             title = phase.title or f"Phase {i}"
             lines.append(f"### Phase {i} \u2014 {title}")
             lines.append("")
+            if phase.objective:
+                lines.append(f"**Objective:** {phase.objective}")
+                lines.append("")
             if phase.narrative:
                 lines.append(phase.narrative)
                 lines.append("")
             if phase.indicative_activities:
-                lines.append("**Indicative activities:**")
+                lines.append("**Key activities:**")
                 lines.append("")
                 lines.extend(_bullets(phase.indicative_activities))
             lines.append("")
@@ -325,7 +437,33 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
         lines.append("The phased approach will be confirmed during discovery.")
         lines.append("")
 
-    lines.extend(["## SCOPE SUMMARY", "", "### In Scope", ""])
+    # --- Change Management ---
+    lines.extend(["## CHANGE MANAGEMENT APPROACH", ""])
+    if proposal.change_management_narrative:
+        lines.append(proposal.change_management_narrative)
+        lines.append("")
+    if COMPANY_PROFILE.get("change_management_principles"):
+        lines.append("**Our approach is built around:**")
+        lines.append("")
+        lines.extend(_bullets(COMPANY_PROFILE["change_management_principles"]))
+
+    # --- Risk Management ---
+    lines.extend(["", "## RISK MANAGEMENT APPROACH", ""])
+    if COMPANY_PROFILE.get("risk_management_principles"):
+        lines.append("Risk is managed systematically across the engagement, including:")
+        lines.append("")
+        lines.extend(_bullets(COMPANY_PROFILE["risk_management_principles"]))
+    if proposal.risk_items:
+        lines.extend(["", "**Risks identified for this engagement:**", ""])
+        for item in proposal.risk_items:
+            risk = item.risk or ""
+            mitigation = item.mitigation or ""
+            if not risk:
+                continue
+            lines.append(f"{BULLET} {risk}" + (f" \u2014 *Mitigation:* {mitigation}" if mitigation else ""))
+
+    # --- Scope ---
+    lines.extend(["", "## SCOPE SUMMARY", "", "### In Scope", ""])
     lines.extend(_bullets(proposal.in_scope) or [f"{BULLET} To be confirmed during discovery."])
     lines.extend(["", "### Out of Scope", ""])
     lines.extend(_bullets(proposal.out_of_scope) or [f"{BULLET} To be confirmed during discovery."])
@@ -333,6 +471,7 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
     lines.extend(["", "## DELIVERABLES", ""])
     lines.extend(_bullets(proposal.deliverables) or [f"{BULLET} To be confirmed during discovery."])
 
+    # --- Team and Commercial ---
     lines.extend(["", "## TEAM AND COMMERCIAL APPROACH", ""])
     lines.append(proposal.commercial_narrative or "Commercial terms to be confirmed once scope is finalised.")
     if proposal.commercial_options:
@@ -353,8 +492,34 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
     lines.extend(["", "## WHY THIS APPROACH", ""])
     lines.append(proposal.why_this_approach or "Rationale to be confirmed during discovery.")
 
-    lines.extend(["", "## RECOMMENDED NEXT STEPS", ""])
+    # --- Case studies (static) ---
+    if COMPANY_PROFILE.get("case_studies"):
+        lines.extend(["", "## REFERENCES AND CASE STUDIES", ""])
+        for cs in COMPANY_PROFILE["case_studies"]:
+            client = cs.get("client", "Client")
+            lines.append(f"### {client}")
+            lines.append("")
+            if cs.get("challenge"):
+                lines.append(f"**Challenge:** {cs['challenge']}")
+            if cs.get("outcome"):
+                lines.append(f"**Outcome:** {cs['outcome']}")
+            lines.append("")
+
+    lines.extend(["## RECOMMENDED NEXT STEPS", ""])
     lines.extend(_bullets(proposal.next_steps) or [f"{BULLET} Next steps to be confirmed."])
+
+    # --- Contact details (static) ---
+    contact = COMPANY_PROFILE.get("contact_details") or {}
+    if contact:
+        lines.extend(["", "## CONTACT DETAILS", ""])
+        if contact.get("name"):
+            lines.append(f"**Name:** {contact['name']}")
+        if contact.get("title"):
+            lines.append(f"**Title:** {contact['title']}")
+        if contact.get("email"):
+            lines.append(f"**Email:** {contact['email']}")
+        if contact.get("phone"):
+            lines.append(f"**Phone:** {contact['phone']}")
 
     return "\n".join(lines).strip()
 
@@ -400,9 +565,10 @@ def generate_proposal(payload: ProposalRequest):
         "version_id": version_id,
         "title": title,
         "structured_proposal": structured_proposal.model_dump(),
-        "sow": proposal_markdown,  # kept as "sow" so SowViewer/ExportPanel render unchanged
+        "sow": proposal_markdown,
         "state": state,
     }
+
 
 @router.post("/proposal/export-pptx")
 def export_proposal_pptx(payload: ProposalPptxExportRequest):
