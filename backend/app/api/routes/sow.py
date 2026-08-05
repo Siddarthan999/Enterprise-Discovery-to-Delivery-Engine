@@ -682,10 +682,15 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "",
             "## 4. OUT-OF-SCOPE & CHANGE ORDERS",
             "",
-            sow.out_of_scope_change_control
-            or "Any work not specifically set forth as Professional Services within this SOW "
-            "is out of scope. Changes to the scope of this SOW require a fully executed "
-            "Change Order signed by both parties.",
+            # sow.out_of_scope_change_control
+            # or (
+            "Any work not specifically set forth as Professional Services within this SOW "
+            "is out of scope of this SOW. Changes to the scope of this SOW require a fully "
+            "executed Change Order. The Change Order must describe the change, the rationale "
+            "for the change, and the effect the change will have on the engagement. A written "
+            "Change Order must be signed by both parties to authorize implementation of the "
+            "requested change.",
+            # ),
             "",
             "## 5. SCHEDULE AND FEES",
             "",
@@ -693,10 +698,10 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "bid on a fixed fee basis set forth below with the estimated duration post "
             "kick-off and engagement planning.",
             "",
-            "### SUMMARY OF SCOPE OF SERVICES",
-            "",
-            f"**Duration:** {_fmt_optional(sow.duration)}",
-            f"**Cost:** {_fmt_cost(sow.fee_amount)}",
+            "| SUMMARY OF SCOPE OF SERVICES | |",
+            "|---|---|",
+            f"| Duration | {_fmt_optional(sow.duration)} |",
+            f"| Cost | {_fmt_cost(sow.fee_amount)} |",
             "",
             f"This engagement will commence with a scheduled start date of "
             f"{_fmt_optional(sow.start_date)}. The scheduled end date of this SOW is "
@@ -710,21 +715,41 @@ def _structured_sow_to_markdown(sow: StructuredSOW) -> str:
             "",
             sow.expenses_terms,
             "",
+            (
+                f"Although not anticipated for this engagement, {_fmt_optional(sow.customer_legal_name)} "
+                "shall reimburse Provider for any reasonable costs related to travel, lodging, "
+                "communications, shipping charges, and other reasonable out-of-pocket expenses "
+                'incurred in connection with providing the Professional Services (collectively, '
+                'the "Expenses").\n\n'
+                f"For the avoidance of doubt, {_fmt_optional(sow.customer_legal_name)} "
+                "shall remain responsible for reimbursing any Expenses actually incurred, "
+                "regardless of whether this Statement of Work is terminated or modified prior "
+                "to completion of the Professional Services.\n\n"
+                f"Any Expenses that are in addition to the fees outlined in this Statement of "
+                f"Work must be submitted to {_fmt_optional(sow.customer_legal_name)} "
+                "for prior written approval before they are incurred."
+            ),
+            "",
             "## 7. INVOICES",
             "",
+            (
+                "All Professional Services fees and taxes, if applicable, will be invoiced "
+                "upon SOW signature and shall be due and payable in accordance with the "
+                "terms of the Agreement."
+            ),
+            "",
             sow.invoicing_terms,
+            f"IN WITNESS WHEREOF, the parties have executed this SOW as of the Effective Date."
             "",
-            "### IN WITNESS WHEREOF, the parties have executed this SOW as of the Effective Date",
             "",
-            f"**{_fmt_optional(sow.provider_legal_name)}**",
-            f"**Name:** {_fmt_optional(sow.provider_signee_name)}",
-            f"**Title:** {_fmt_optional(sow.provider_signee_title)}",
-            "Date Signed:",
-            "",
-            f"**{_fmt_optional(sow.customer_legal_name)}**",
-            f"**Name:** {_fmt_optional(sow.customer_signee_name)}",
-            f"**Title:** {_fmt_optional(sow.customer_signee_title)}",
-            "Date Signed:",
+            # "### IN WITNESS WHEREOF, the parties have executed this SOW as of the Effective Date",
+            # "",
+            "| | |",
+            "|---|---|",
+            f"| **{_fmt_optional(sow.provider_legal_name)}** | **{_fmt_optional(sow.customer_legal_name)}** |",
+            f"| **Name:** {_fmt_optional(sow.provider_signee_name)} | **Name:** {_fmt_optional(sow.customer_signee_name)} |",
+            f"| **Title:** {_fmt_optional(sow.provider_signee_title)} | **Title:** {_fmt_optional(sow.customer_signee_title)} |",
+            "| **Date Signed:** ____________________ | **Date Signed:** ____________________ |",
         ]
     )
 

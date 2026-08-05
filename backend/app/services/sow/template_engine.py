@@ -1,6 +1,9 @@
+import os
 import re
 import subprocess
 from datetime import datetime
+from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -37,6 +40,8 @@ _DOC_TYPE_LABELS = {
     "sow": "Statement of Work",
     "proposal": "Proposal",
 }
+
+_IMAGE_LINE_RE = re.compile(r"^!\[(.*?)\]\((.*?)\)$")
 
 def _resolve_doc_type_label(doc_type: str | None) -> str:
     return _DOC_TYPE_LABELS.get((doc_type or "sow").lower(), "Statement of Work")
@@ -704,6 +709,35 @@ def add_sow_content(doc: Document, markdown: str, for_pdf: bool = False):
         line = raw.strip()
 
         if not line:
+            i += 1
+            continue
+
+         # ----------------------------
+        # IMAGE SUPPORT
+        # ----------------------------
+        img_match = _IMAGE_LINE_RE.match(line)
+        if img_match:
+            img_path = img_match.group(2).strip()
+            abs_path = (
+                img_path
+                if os.path.isabs(img_path)
+                else os.path.abspath(img_path)
+            )
+
+            if os.path.exists(abs_path):
+                p = _insert_paragraph_after(current, "", style=styles["body"])
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                run = p.add_run()
+                try:
+                    run.add_picture(abs_path, width=Inches(6))
+                except Exception as e:
+                    print(f"⚠️ Failed to embed image {abs_path}: {e}")
+
+                current = p
+            else:
+                print(f"⚠️ Image not found, skipping: {abs_path}")
+
             i += 1
             continue
 

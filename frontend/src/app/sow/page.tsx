@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FileText, Sparkles, Download, ChevronRight, FilePenLine, Plus, Trash2, Check, X, } from "lucide-react";
 import TranscriptPanel from "@/components/sow/TranscriptPanel";
 import DiscoveryPanel from "@/components/sow/DiscoveryPanel";
@@ -37,6 +37,7 @@ export default function SOWPage() {
   // Default is "sow" so existing behavior is unchanged unless the user
   // explicitly switches.
   const [mode, setMode] = useState<DocMode>("sow");
+  const discoveryRef = useRef<any>(null);
 
   useEffect(() => {
     async function loadTemplates() {
@@ -123,6 +124,16 @@ export default function SOWPage() {
     } else {
       setSelectedAuthor("");
     }
+  }
+
+  async function handleGenerateSow() {
+    // Switch to SOW mode
+    setMode("sow");
+
+    // Wait for DiscoveryPanel to receive the new mode
+    setTimeout(() => {
+      discoveryRef.current?.runDiscovery();
+    }, 0);
   }
 
   return (
@@ -260,19 +271,18 @@ export default function SOWPage() {
 
             <div className="flex items-center rounded-lg border border-white/10 bg-zinc-950/70 p-1">
               <button
-                onClick={() => handleModeChange("sow")}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  mode === "sow" ? "bg-[#c90c61] text-white" : "text-zinc-400 hover:text-white" }`}
-              >
-                SOW
-              </button>
-
-              <button
                 onClick={() => handleModeChange("proposal")}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
                   mode === "proposal" ? "bg-[#c90c61] text-white" : "text-zinc-400 hover:text-white" }`}
               >
                 Proposal
+              </button>
+              <button
+                onClick={() => handleModeChange("sow")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  mode === "sow" ? "bg-[#c90c61] text-white" : "text-zinc-400 hover:text-white" }`}
+              >
+                SOW
               </button>
             </div>
           </div>
@@ -287,6 +297,7 @@ export default function SOWPage() {
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TranscriptPanel transcript={transcript} setTranscript={setTranscript} />
           <DiscoveryPanel
+            ref={discoveryRef}
             mode={mode}
             transcript={transcript}
             authorId={selectedAuthor}
@@ -303,7 +314,7 @@ export default function SOWPage() {
         </div>
         {/* SOW / Proposal Viewer */}
         <div className="mt-6">
-          <SowViewer sow={sow} mode={mode} />
+          <SowViewer sow={sow} mode={mode} showGenerateSow={mode === "proposal" && !!sow} onGenerateSow={handleGenerateSow} />
         </div>
         {/* Review Panel — AI Reviewers only apply to SOW mode */}
         {mode === "sow" && <ReviewPanel review={review} confidence={confidence} />}

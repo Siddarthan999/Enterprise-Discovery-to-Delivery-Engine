@@ -49,3 +49,5 @@ pnpm-lock.yaml
 # Keep uploads directory, ignore its contents
 app/templates/uploads/*
 !app/templates/uploads/.gitkeep
+
+generated/proposal_visuals/*

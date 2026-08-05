@@ -5,7 +5,9 @@ import { FileText, Copy, Check } from "lucide-react";
 
 type DocMode = "sow" | "proposal";
 
-export default function SowViewer({ sow, mode }: { sow: string; mode: DocMode }) {
+export default function SowViewer({ sow, mode, showGenerateSow = false, onGenerateSow }: 
+  { sow: string; mode: DocMode; showGenerateSow?: boolean; onGenerateSow?: () => void }) {
+
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -43,6 +45,15 @@ export default function SowViewer({ sow, mode }: { sow: string; mode: DocMode })
             >
               {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
               {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+
+          {showGenerateSow && (
+            <button
+              onClick={onGenerateSow}
+              className="rounded-md bg-[#c90c61] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#a70a4d]"
+            >
+              Generate SOW
             </button>
           )}
         </div>
