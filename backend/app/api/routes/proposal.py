@@ -2,6 +2,7 @@ import json
 import re
 import io
 import os
+import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from app.core.llm_router import generate_completion
@@ -12,6 +13,7 @@ from app.services.sow.project_state_service import save_project_state
 from fastapi.responses import StreamingResponse
 from app.services.sow.template_storage import load_templates, TEMPLATE_DIR
 from app.services.proposal.pptx_generator import generate_proposal_pptx
+from app.services.proposal.proposal_visuals import generate_solution_diagram, generate_approach_diagram
 
 router = APIRouter(tags=["proposal"])
 
@@ -347,7 +349,7 @@ def _bullets(items: list[str]) -> list[str]:
     return [f"{BULLET} {item}" for item in items]
 
 
-def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
+def _structured_proposal_to_markdown(proposal, solution_diagram_path=None, approach_diagram_path=None):
     lines: list[str] = [
         "## EXECUTIVE SUMMARY",
         "",
@@ -402,6 +404,8 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
     # --- Proposed Solution ---
     lines.extend(["", "## PROPOSED SOLUTION", ""])
     lines.append(proposal.solution_overview or "Solution overview to be confirmed during discovery.")
+    if solution_diagram_path:
+        lines.extend(["", f"![Solution Overview Diagram]({solution_diagram_path})", ""])
     if proposal.solution_components:
         lines.extend(["", "### Core Solution Components", ""])
         for comp in proposal.solution_components:
@@ -417,6 +421,8 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
             f"methodology: {COMPANY_PROFILE['delivery_methodology_summary']}"
         )
         lines.append("")
+    if approach_diagram_path:
+        lines.extend(["", f"![Delivery Approach Roadmap]({approach_diagram_path})", ""])
     if proposal.approach_phases:
         for i, phase in enumerate(proposal.approach_phases, start=1):
             title = phase.title or f"Phase {i}"
@@ -492,17 +498,42 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
     lines.extend(["", "## WHY THIS APPROACH", ""])
     lines.append(proposal.why_this_approach or "Rationale to be confirmed during discovery.")
 
+    def _section_content(label, content):
+        if isinstance(content, list):
+            lines.append(f"**{label}:**")
+            lines.append("")
+            lines.extend(_bullets(content))
+        elif content:
+            # Convert concatenated sentences into bullets when multiple points exist
+            points = [p.strip() for p in content.split(".") if p.strip()]
+
+            if len(points) > 1:
+                lines.append(f"**{label}:**")
+                lines.append("")
+                lines.extend(_bullets([f"{p}." for p in points]))
+            else:
+                lines.append(f"**{label}:** {content}")
+
     # --- Case studies (static) ---
     if COMPANY_PROFILE.get("case_studies"):
         lines.extend(["", "## REFERENCES AND CASE STUDIES", ""])
-        for cs in COMPANY_PROFILE["case_studies"]:
+        for idx, cs in enumerate(COMPANY_PROFILE["case_studies"], start=1):
             client = cs.get("client", "Client")
-            lines.append(f"### {client}")
+            lines.append(f"### Client {idx}: {client}")
             lines.append("")
+
             if cs.get("challenge"):
-                lines.append(f"**Challenge:** {cs['challenge']}")
+                _section_content("Key Challenges", cs["challenge"])
+
+            if cs.get("solution"):
+                _section_content("Solutions", cs["solution"])
+
             if cs.get("outcome"):
-                lines.append(f"**Outcome:** {cs['outcome']}")
+                _section_content("Key Outcomes", cs["outcome"])
+
+            if cs.get("testimonial"):
+                lines.append(f"**Client Testimonial:** {cs['testimonial']}")
+
             lines.append("")
 
     lines.extend(["## RECOMMENDED NEXT STEPS", ""])
@@ -512,14 +543,21 @@ def _structured_proposal_to_markdown(proposal: StructuredProposal) -> str:
     contact = COMPANY_PROFILE.get("contact_details") or {}
     if contact:
         lines.extend(["", "## CONTACT DETAILS", ""])
+        lines.append("| | |")
+        lines.append("|---|---|")
+
         if contact.get("name"):
-            lines.append(f"**Name:** {contact['name']}")
-        if contact.get("title"):
-            lines.append(f"**Title:** {contact['title']}")
-        if contact.get("email"):
-            lines.append(f"**Email:** {contact['email']}")
+            lines.append(f"| **Name of Offeror's Organisation** | {contact['name']} |")
+        if contact.get("address"):
+            lines.append(f"| **Address** | {contact['address']} |")
         if contact.get("phone"):
-            lines.append(f"**Phone:** {contact['phone']}")
+            lines.append(f"| **Telephone Number** | {contact['phone']} |")
+        if contact.get("email"):
+            lines.append(f"| **Email Address** | {contact['email']} |")
+        if contact.get("website"):
+            lines.append(f"| **Website** | {contact['website']} |")
+        if contact.get("date"):
+            lines.append(f"| **Date of Submission** | {contact['date']} |")
 
     return "\n".join(lines).strip()
 
@@ -529,22 +567,33 @@ def generate_proposal(payload: ProposalRequest):
     state = payload.state
     if not state or not isinstance(state, dict):
         return {"error": "No proposal state found"}
-
     if state.get("error"):
         return {
             "error": f"Cannot generate Proposal because discovery extraction failed: {state['error']}",
             "state": state,
         }
-
     client_name = state.get("client_name") or "the client"
-
     try:
         structured_proposal = generate_structured_proposal(state, payload.transcript)
     except Exception as e:
         return {"error": f"Proposal generation failed: {e}"}
 
     title = payload.title or structured_proposal.proposal_title or f"Proposal - {client_name}"
-    proposal_markdown = _structured_proposal_to_markdown(structured_proposal)
+
+    # generate diagrams first, using a fresh uuid — no dependency on proposal_id
+    gen_uid = uuid.uuid4().hex[:8]
+    solution_diagram_path = generate_solution_diagram(
+        [c.model_dump() for c in structured_proposal.solution_components],
+        filename=f"solution_{gen_uid}.png",
+    )
+    approach_diagram_path = generate_approach_diagram(
+        [p.model_dump() for p in structured_proposal.approach_phases],
+        filename=f"approach_{gen_uid}.png",
+    )
+
+    proposal_markdown = _structured_proposal_to_markdown(
+        structured_proposal, solution_diagram_path, approach_diagram_path
+    )
 
     proposal_id = None
     version_id = None

@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, forwardRef, useImperativeHandle, } from "react";
 import { Sparkles, Loader2, ChevronDown, ListTree } from "lucide-react";
 
 type DocMode = "sow" | "proposal";
 
-export default function DiscoveryPanel({
+const DiscoveryPanel = forwardRef(function DiscoveryPanel({
   mode,
   transcript,
   authorId,
@@ -31,7 +31,7 @@ export default function DiscoveryPanel({
   setHistoricalSowsUsed: (value: any[]) => void;
   setHistoricalRisksConsidered: (value: any[]) => void;
   setStructuredProposal: (value: any) => void;
-}) {
+}, ref) {
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -153,6 +153,10 @@ export default function DiscoveryPanel({
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    runDiscovery,
+  }));
+
   const fieldCount = state
     ? Object.keys(state).filter(
         (key) => key !== "error" && key !== "frontend_error" && key !== "raw_response"
@@ -227,4 +231,6 @@ export default function DiscoveryPanel({
       )}
     </div>
   );
-}
+});
+
+export default DiscoveryPanel;

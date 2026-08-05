@@ -24,10 +24,17 @@ export default function ExportPanel({ mode, state, sow, templateId, templateType
   const [loading, setLoading] = useState(false);
 
   const isPptxTemplate = templateType === "pptx";
+
+  // Temporarily hide PPTX export from the UI.
+  // Uncomment when PPTX export is ready to be exposed again.
+  const FORMATS = BASE_FORMATS;
+
+  /*
   const FORMATS =
     mode === "proposal"
       ? [...BASE_FORMATS, { id: "pptx", label: "PPTX", icon: FileType }]
       : BASE_FORMATS;
+*/
 
   async function exportFile() {
     if (format === "pptx") {
@@ -119,19 +126,25 @@ export default function ExportPanel({ mode, state, sow, templateId, templateType
             {FORMATS.map((f) => {
               const Icon = f.icon;
               const active = format === f.id;
-              const disabled = f.id === "pptx" ? !isPptxTemplate : isPptxTemplate;
+              // PPTX export is currently hidden.
+              // const disabled = f.id === "pptx" ? !isPptxTemplate : isPptxTemplate;
+              const disabled = false;
+
               return (
                 <button
                   key={f.id}
                   onClick={() => !disabled && setFormat(f.id)}
                   disabled={disabled}
-                  title={
-                    disabled
-                      ? f.id === "pptx"
-                        ? "Select a PPTX/POTX template to enable this"
-                        : "A PPTX/POTX template is selected — choose the PPTX format"
-                      : undefined
-                  }
+                  // PPTX export is currently hidden.
+                  // title={
+                  //   disabled
+                  //     ? f.id === "pptx"
+                  //       ? "Select a PPTX/POTX template to enable this"
+                  //       : "A PPTX/POTX template is selected — choose the PPTX format"
+                  //     : undefined
+                  // }
+
+                  title={undefined}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
                     active
                       ? "bg-white text-black"
