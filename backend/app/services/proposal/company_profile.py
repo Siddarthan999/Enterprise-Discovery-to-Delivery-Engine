@@ -9,6 +9,8 @@ TODO: replace every placeholder (marked with [ ]) before this goes live
 for real client-facing proposals.
 """
 
+from datetime import date
+
 COMPANY_PROFILE = {
     "company_name": "Elabor8 | A Cprime Company",
 
@@ -63,34 +65,53 @@ COMPANY_PROFILE = {
 
     "case_studies": [
         {
-            "client": "Global pharmaceutical leader",
+            "client": "Optus",
             "challenge": (
-                "The client needed to streamline IT demand management and improve "
-                "end-to-end flow from demand to delivery."
+                "Optus faced a high-stakes challenge: migrating its mission-critical knowledge base from a legacy system, Knosys, to the modern Atlassian Confluence platform. This system was the central source of truth for its frontline staff, meaning any disruption could directly impact customer service quality. The project was clouded by uncertainty, with significant technical unknowns about the legacy platform that made it difficult to scope the effort. The team needed to navigate the migration of approximately 3,000 pages of content while determining if the project was a simple platform shift or a broader transformation requiring content optimisation and user training. The primary goal was to successfully execute this complex transition without undermining the efficiency of their customer-facing teams."
+            ),
+            "solution": (
+                "To navigate the ambiguity and de-risk the project, Cprime Elabor8 introduced a two week, Agile-based preparatory sprint called 'Phase Zero.' This initial phase was designed to build a strong foundation before committing to the full-scale migration. The solution began with deep discovery workshops involving key stakeholders to map out requirements and understand the system's current use. From there, the team executed a small-scale proof-of-concept (POC) migration. This practical test was crucial for validating the technical approach and uncovering potential issues in a safe environment. The insights gained were then used to design the target state in Confluence and create a detailed, production-ready plan for a pilot migration (currently being executed)."
             ),
             "outcome": (
-                "Elabor8 | A Cprime Company implemented a demand-to-delivery process using "
-                "Apptio Targetprocess integrated with Jira and other systems, helping "
-                "the client streamline processes and improve efficiency within three months."
+                "To navigate the ambiguity and de-risk the project, Cprime Elabor8 introduced a two week, Agile-based preparatory sprint called 'Phase Zero.' This initial phase was designed to build a strong foundation before committing to the full-scale migration. The solution began with deep discovery workshops involving key stakeholders to map out requirements and understand the system's current use. From there, the team executed a small-scale proof-of-concept (POC) migration. This practical test was crucial for validating the technical approach and uncovering potential issues in a safe environment. The insights gained were then used to design the target state in Confluence and create a detailed, production-ready plan for a pilot migration (currently being executed)."
+                "Clarity on Scope and Effort: The full scope, timeline, and resource requirements for the migration were accurately defined."
+                "Proactive Issue Resolution: Potential technical and adoption challenges were identified and mitigated before they could impact the main project."
+            ),
+            "testimonial": (
+                "'The Phase Zero approach was invaluable. It allowed us to understand the complexities of our legacy system and plan a migration that would not disrupt our customer service operations. The team’s expertise and structured methodology gave us confidence in the success of the project.' — Optus Project Lead."
             ),
         },
         {
-            "client": "Leading super fund",
+            "client": "PayPal: The Largest Atlassian Cloud Migration in History",
             "challenge": (
-                "The organisation needed to improve agility, employee engagement, "
-                "member acquisition, and project delivery efficiency."
+                "Developer experiences hurdles: Over 35,000 active users faced slow performance, limited new features, and complex, outdated interfaces."
+                "Cost and efficiency issues: High total cost of ownership and reliance on inefficient, manual processes drove up maintenance expenses and decreased operational efficiency."
+                "Scalability and flexibility barriers: Legacy infrastructure could not scale to meet demand spikes or easily adapt to PayPal’s evolving requirements, limiting business agility."
+            ),
+            "solution": (
+                "Comprehensive cloud migration: We executed a detailed phased migration plan, including infrastructure assessment, risk management, and resource allocation, to minimise disruption and maximise efficiency."
+                "Workflow transformation: Transformed and scripted over 1,200 individually customised workflows and add-ons, ensuring seamless Day 1 operation and continuous optimisation post-migration."
+                "Close partnership and continuous improvement: We worked with Atlassian and PayPal worked collaboratively holding regular status meetings and making iterative improvements, especially enhancing the Confluence migration experience for end-users."
             ),
             "outcome": (
-                "Elabor8 | A Cprime Company helped optimise work delivery and improve delivery "
-                "performance across the organisation."
+                "Enhanced developer experience for 35,000+ active users with improved flexibility, automation, and access to cloud features."
+                "Massive data migration completed: 3,000+ Jira projects, 3.5 million issues, 13,000 Confluence spaces, and 14 million pages—all migrated in a single weekend."
+                "Improved operational efficiency, real-time reporting, faster decision-making, and adoption of agile practices leading to quicker time-to-market for new products."
+                "Set a benchmark for large-scale Atlassian Cloud migrations, enabling PayPal’s future innovation and growth with a robust, efficient, and scalable foundation."
+            ),
+            "testimonial": (
+                "'The structured approach to prioritising and managing the migration helped dissipate doubts about the suitability of the cloud for PayPal. The process was a journey of continuous improvements, ultimately leading to a successful migration.' — PayPal Engineering Executive."
             ),
         },
     ],
 
     "contact_details": {
-        "name": "contact@elabor8.com.au",
+        "name": "Elabor8, A Cprime Company",
         "title": "Any questions",
-        "email": "contact@elabor8.com.au",
+        "address": "Level 14/175 Pitt St, Sydney NSW 2000",
         "phone": "+61 1300 352 278",
+        "email": "contact@elabor8.com",
+        "website": "https://elabor8.com.au",
+        "date": date.today().isoformat(),
     },
 }
