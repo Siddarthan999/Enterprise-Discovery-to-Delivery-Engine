@@ -1,3 +1,14 @@
+### Demo:
+
+### Architecture
+#### The Intelligence Layer (Big Picture)
+
+<img width="1585" height="676" alt="The Intelligence Layer (Big Picture)" src="https://github.com/user-attachments/assets/8770fd24-e545-4d03-9de8-c122545deec4" />
+
+#### The Intelligence Layer (Under The Hood)
+
+<img width="1151" height="722" alt="The Intelligence Layer (Under The Hood)" src="https://github.com/user-attachments/assets/22b568fd-2693-43df-98b5-c706584cae3d" />
+
 ### Build:
 `docker compose up --build`
 
