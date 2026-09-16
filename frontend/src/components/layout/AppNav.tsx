@@ -9,8 +9,8 @@ import App from "next/app";
 const items = [
   { href: "/chat", label: "Chat", icon: Bot },
   { href: "/search", label: "Search", icon: Search },
-  { href: "/sow", label: "SOW", icon: FileText },
   { href: "/resources", label: "Resources", icon: Layers3 },
+  { href: "/sow", label: "SOW", icon: FileText },
   { href: "/approval", label: "Approval", icon: CircleCheck },
   { href: "/delivery", label: "Delivery", icon: Workflow },
 ];
