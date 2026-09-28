@@ -6,12 +6,10 @@ Transform scattered enterprise knowledge into validated solutioning, proposals, 
 
 <div align="center">
   <a href="https://www.youtube.com/watch?v=QdaFAsbB_xo">
-    <img
-      src="https://img.youtube.com/vi/QdaFAsbB_xo/maxresdefault.jpg"
-      alt="Watch the demo"
-      height="300"
-    >
+    <img src="https://img.youtube.com/vi/QdaFAsbB_xo/maxresdefault.jpg" alt="Click to watch the demo" height="300">
   </a>
+  <br>
+  <strong>Click to watch the demo</strong>
 </div>
 
 ## Architecture
