@@ -153,6 +153,12 @@ DELETE FROM documents;
 TRUNCATE TABLE proposal_versions, proposal_documents RESTART IDENTITY;
 ```
 
+Generate SQL Backup
+
+```sql
+docker exec enterprisediscovery-to-deliveryengine-postgres-1 pg_dump -U postgres enterprise > enterprise_backup.sql
+```
+
 ### Ollama
 
 If the GPU layer causes issues and Ollama is not running:
