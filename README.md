@@ -4,9 +4,15 @@ Transform scattered enterprise knowledge into validated solutioning, proposals, 
 
 ## Demo
 
-<video src="./Demo.mp4" controls>
-  Your browser does not support embedded video. <a href="./Demo.mp4">Download the demo video</a>.
-</video>
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=QdaFAsbB_xo">
+    <img
+      src="https://img.youtube.com/vi/QdaFAsbB_xo/maxresdefault.jpg"
+      alt="Watch the demo"
+      height="300"
+    >
+  </a>
+</div>
 
 ## Architecture
 
